@@ -28,6 +28,8 @@ exports.writeToFileImpl = function(path, buf, cb) {
 
 exports.printImpl = function(array) {
   return function() {
-    console.log(array);
+    let numbers = [];
+    array.forEach(b => numbers.push("0x" + b.toString(16).toUpperCase()));
+    console.log("[" + numbers.join(", ") + "]");
   };
 };

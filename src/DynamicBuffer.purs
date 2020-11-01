@@ -120,4 +120,6 @@ foreign import printImpl :: Uint8Array -> Effect Unit
 print :: DBuffer -> Effect Unit
 print (DBuffer buf) = do
   bytes <- Ref.read buf.bytes
-  printImpl bytes
+  position <- Ref.read buf.position
+  used_bytes <- runEffectFn3 subarray bytes 0 position
+  printImpl used_bytes
