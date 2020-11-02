@@ -1,7 +1,7 @@
 -- | Defines the Abstract Syntax of WebAssembly as PureScript data types
 module Wasm.Syntax where
 
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 
 data ValType = I32 | I64 | F32 | F64
 
@@ -182,3 +182,18 @@ type Module =
   , imports :: Array Import
   , exports :: Array Export
   }
+
+emptyModule :: Module
+emptyModule =
+  { types    : []
+  , funcs    : []
+  , tables   : []
+  , memories : []
+  , globals  : []
+  , elem     : []
+  , data     : []
+  , start    : Nothing
+  , imports  : []
+  , exports  : []
+  }
+

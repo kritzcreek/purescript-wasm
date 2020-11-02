@@ -236,11 +236,9 @@ write_module :: S.Module -> Effect DBuffer
 write_module module_ = do
   b <- DBuffer.create 1024
   write_header b
-  write_type_section b module_.types
-  write_import_section b module_.imports
-  write_function_section b module_.funcs
-  write_table_section b module_.tables
+  unless (Array.null module_.types) (write_type_section b module_.types)
+  unless (Array.null module_.imports) (write_import_section b module_.imports)
+  unless (Array.null module_.funcs) (write_function_section b module_.funcs)
+  unless (Array.null module_.tables) (write_table_section b module_.tables)
   -- TODO: Continue below
-  write_export_section b
-  write_code_section b
   pure b
