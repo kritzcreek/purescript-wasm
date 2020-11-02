@@ -3,6 +3,7 @@ module DynamicBuffer
   , create
   , add_int8
   , add_buffer
+  , add_utf8
 
   , get_bytes
   , get_position
@@ -26,6 +27,7 @@ import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, mkEffectFn1, runEffect
 
 type Offset = Int
 
+foreign import lengthImpl :: EffectFn1 Uint8Array Int
 foreign import setImpl :: EffectFn3 Uint8Array Offset Int Unit
 foreign import setAllImpl :: EffectFn3 Uint8Array Offset Uint8Array Unit
 foreign import allocate :: EffectFn1 Int Uint8Array
@@ -87,6 +89,22 @@ add_buffer b@(DBuffer buf) x@(DBuffer xb) = do
   runEffectFn3 setAllImpl bytes buf_position xb_sub
 
   Ref.write new_position buf.position
+
+foreign import encode_utf8 :: EffectFn1 String Uint8Array
+
+from_utf8 :: String -> Effect DBuffer
+from_utf8 s = do
+  bytes' <- runEffectFn1 encode_utf8 s
+  length' <- runEffectFn1 lengthImpl bytes'
+  bytes <- Ref.new bytes'
+  length <- Ref.new length'
+  position <- Ref.new length'
+  pure (DBuffer { bytes, length, position })
+
+add_utf8 :: DBuffer -> String -> Effect Unit
+add_utf8 b s = do
+  encoded <- from_utf8 s
+  add_buffer b encoded
 
 get_bytes :: DBuffer -> Effect Uint8Array
 get_bytes (DBuffer { bytes }) = Ref.read bytes

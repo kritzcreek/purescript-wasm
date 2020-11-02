@@ -1,5 +1,9 @@
 const fs = require('fs');
 
+exports.lengthImpl = function(array) {
+  return array.length;
+};
+
 exports.setImpl = function(array, offset, x) {
   array[offset] = x;
 };
@@ -32,4 +36,9 @@ exports.printImpl = function(array) {
     array.forEach(b => numbers.push("0x" + b.toString(16).toUpperCase()));
     console.log("[" + numbers.join(", ") + "]");
   };
+};
+
+exports.encode_utf8 = function(s) {
+  let te = new TextEncoder();
+  return te.encode(s)
 };
