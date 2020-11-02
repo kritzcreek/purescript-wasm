@@ -5,12 +5,12 @@ import Prelude
 import Data.Array as Array
 import Data.Foldable (sequence_)
 import Data.Int.Bits as Bits
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 import DynamicBuffer (DBuffer)
 import DynamicBuffer as DBuffer
 import Effect (Effect)
-import Effect.Exception (Error)
 import Partial.Unsafe (unsafeCrashWith)
+import Wasm.Syntax as S
 
 unsigned_leb128 :: DBuffer -> Int -> Effect Unit
 unsigned_leb128 b x =
@@ -47,8 +47,8 @@ write_header b = do
   DBuffer.add_int8 b 0x00
   DBuffer.add_int8 b 0x00
 
-reserve_section_size :: DBuffer -> Effect Int
-reserve_section_size b = do
+reserve_size :: DBuffer -> Effect Int
+reserve_size b = do
   start <- DBuffer.get_position b
   DBuffer.add_int8 b 0
   DBuffer.add_int8 b 0
@@ -57,8 +57,8 @@ reserve_section_size b = do
   DBuffer.add_int8 b 0
   pure start
 
-write_section_size :: DBuffer -> Int -> Int -> Effect Unit
-write_section_size b offset s = do
+write_reserved_size :: DBuffer -> Int -> Int -> Effect Unit
+write_reserved_size b offset s = do
   let size = s + 0
   let chunk1 = (s `Bits.and` 0x7f) `Bits.or` 0x80
   let chunk2 = ((Bits.shr s 7) `Bits.and` 0x7f) `Bits.or` 0x80
@@ -86,22 +86,29 @@ write_custom_section b = do
 
 type SectionId = Int
 
-write_result_type :: DBuffer -> Effect Unit
-write_result_type b = write_vec b [ DBuffer.add_int8 b 0x7F ]
+write_value_type :: DBuffer -> S.ValType -> Effect Unit
+write_value_type b ty = DBuffer.add_int8 b case ty of
+  S.I32 -> 0x7F
+  S.I64 -> 0x7E
+  S.F32 -> 0x7D
+  S.F64 -> 0x7C
 
-write_func_type :: DBuffer -> Effect Unit
-write_func_type b = do
+write_result_type :: DBuffer -> S.ResultType -> Effect Unit
+write_result_type b ty = write_vec b (map (write_value_type b) ty)
+
+write_func_type :: DBuffer -> S.FuncType -> Effect Unit
+write_func_type b { arguments, results } = do
   DBuffer.add_int8 b 0x60
-  write_result_type b
-  write_result_type b
+  write_result_type b arguments
+  write_result_type b results
 
-write_type_section :: DBuffer -> Effect Unit
-write_type_section b = write_section b 1 do
-  write_vec b [ write_func_type b ]
+write_type_section :: DBuffer -> Array S.FuncType -> Effect Unit
+write_type_section b types = write_section b 1 do
+  write_vec b (map (write_func_type b) types)
 
-write_function_section :: DBuffer -> Effect Unit
-write_function_section b = write_section b 3 do
-  write_vec b [ DBuffer.add_int8 b 0 ]
+write_function_section :: DBuffer -> Array S.Func -> Effect Unit
+write_function_section b funcs = write_section b 3 do
+  write_vec b (map (write_u32 b <<< _.type) funcs)
 
 write_export :: DBuffer -> Effect Unit
 write_export b = do
@@ -140,11 +147,11 @@ write_func b = do
 
 write_code :: DBuffer -> Effect Unit
 write_code b = do
-  size_offset <- reserve_section_size b
+  size_offset <- reserve_size b
   start <- DBuffer.get_position b
   write_func b
   end <- DBuffer.get_position b
-  write_section_size b size_offset (end - start)
+  write_reserved_size b size_offset (end - start)
 
 write_code_section :: DBuffer -> Effect Unit
 write_code_section b = write_section b 10 do
@@ -153,21 +160,87 @@ write_code_section b = write_section b 10 do
 write_section :: DBuffer -> SectionId -> Effect Unit -> Effect Unit
 write_section b id f = do
   DBuffer.add_int8 b id
-  size_offset <- reserve_section_size b
+  size_offset <- reserve_size b
   start <- DBuffer.get_position b
   f
   end <- DBuffer.get_position b
   let size = end - start
-  write_section_size b size_offset size
+  write_reserved_size b size_offset size
   pure unit
 
-write_module :: (Maybe Error -> Effect Unit) -> Effect Unit
-write_module cb = do
+write_elem_type :: DBuffer -> S.ElemType -> Effect Unit
+write_elem_type b = case _ of
+  S.FuncRef -> DBuffer.add_int8 b 0x70
+
+write_limits :: DBuffer -> S.Limits -> Effect Unit
+write_limits b { min, max } = case max of
+  Nothing -> do
+    DBuffer.add_int8 b 0x00
+    unsigned_leb128 b min
+  Just max' -> do
+    DBuffer.add_int8 b 0x01
+    unsigned_leb128 b min
+    unsigned_leb128 b max'
+
+write_table_type :: DBuffer -> S.TableType -> Effect Unit
+write_table_type b { limits, elemtype } = do
+  write_elem_type b elemtype
+  write_limits b limits
+
+write_mutability :: DBuffer -> S.Mutability -> Effect Unit
+write_mutability b mut = DBuffer.add_int8 b case mut of
+  S.Const -> 0x00
+  S.Var -> 0x01
+
+write_global_type :: DBuffer -> S.GlobalType -> Effect Unit
+write_global_type b { mutability, type: ty } = do
+  write_value_type b ty
+  write_mutability b mutability
+
+write_import_desc :: DBuffer -> S.ImportDesc -> Effect Unit
+write_import_desc b = case _ of
+  S.ImportFunc ix -> do
+    DBuffer.add_int8 b 0x00
+    unsigned_leb128 b ix
+  S.ImportTable table_type -> do
+    DBuffer.add_int8 b 0x01
+    write_table_type b table_type
+  S.ImportMemory limits -> do
+    DBuffer.add_int8 b 0x02
+    write_limits b limits
+  S.ImportGlobal global_type -> do
+    DBuffer.add_int8 b 0x03
+    write_global_type b global_type
+
+write_name :: DBuffer -> S.Name -> Effect Unit
+write_name = DBuffer.add_utf8
+
+write_import :: DBuffer -> S.Import -> Effect Unit
+write_import b imp = do
+  write_name b imp.module
+  write_name b imp.name
+  write_import_desc b imp.desc
+
+write_import_section :: DBuffer -> Array S.Import -> Effect Unit
+write_import_section b imports = write_section b 2
+  (write_vec b (map (write_import b) imports))
+
+write_table :: DBuffer -> S.Table -> Effect Unit
+write_table b t = write_table_type b t.type
+
+write_table_section :: DBuffer -> Array S.Table -> Effect Unit
+write_table_section b tables = write_section b 4 do
+  write_vec b (map (write_table b) tables)
+
+write_module :: S.Module -> Effect DBuffer
+write_module module_ = do
   b <- DBuffer.create 1024
   write_header b
-  write_custom_section b
-  write_type_section b
-  write_function_section b
+  write_type_section b module_.types
+  write_import_section b module_.imports
+  write_function_section b module_.funcs
+  write_table_section b module_.tables
+  -- TODO: Continue below
   write_export_section b
   write_code_section b
-  DBuffer.writeToFile "bytes.wasm" b cb
+  pure b
