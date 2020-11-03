@@ -73,11 +73,13 @@ data Instruction
 
   -- Memory Instructions
   | I32Load MemArg
-  | I32Store MemArg
-  | I32Load8_u MemArg
   | I32Load8_s MemArg
-  | I32Load16_u MemArg
+  | I32Load8_u MemArg
   | I32Load16_s MemArg
+  | I32Load16_u MemArg
+  | I32Store MemArg
+  | I32Store8 MemArg
+  | I32Store16 MemArg
   | MemorySize
   | MemoryGrow
 

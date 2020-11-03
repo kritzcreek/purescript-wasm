@@ -6,6 +6,7 @@ import Data.Array as Array
 import Data.Foldable (sequence_)
 import Data.Int.Bits as Bits
 import Data.Maybe (Maybe(..))
+import Data.Traversable (for_)
 import DynamicBuffer (DBuffer)
 import DynamicBuffer as DBuffer
 import Effect (Effect)
@@ -124,38 +125,184 @@ write_export_section :: DBuffer -> Effect Unit
 write_export_section b = write_section b 7 do
   write_vec b [ write_export b ]
 
-write_expr :: DBuffer -> Effect Unit
-write_expr b = do
-  -- local.get 0
-  DBuffer.add_int8 b 0x20
-  DBuffer.add_int8 b 0x00
+write_memarg :: DBuffer -> S.MemArg -> Effect Unit
+write_memarg b { align, offset } = do
+  unsigned_leb128 b align
+  unsigned_leb128 b offset
 
-  -- i32.const 10
-  DBuffer.add_int8 b 0x41
-  signed_leb128 b (-16452)
+write_block_type :: DBuffer -> S.BlockType -> Effect Unit
+write_block_type b = case _ of
+  S.BlockValType Nothing ->
+    DBuffer.add_int8 b 0x40
+  S.BlockValType (Just ty) ->
+    write_value_type b ty
+  S.BlockTypeIdx idx ->
+    signed_leb128 b idx
 
-  -- i32.add
-  DBuffer.add_int8 b 0x6A
+write_instr :: DBuffer -> S.Instruction -> Effect Unit
+write_instr b = case _ of
+  S.I32Const n -> do
+    DBuffer.add_int8 b 0x41
+    signed_leb128 b n
+  S.I32Clz ->
+    DBuffer.add_int8 b 0x67
+  S.I32Ctz ->
+    DBuffer.add_int8 b 0x68
+  S.I32Popcnt ->
+    DBuffer.add_int8 b 0x69
+  S.I32Add ->
+    DBuffer.add_int8 b 0x6A
+  S.I32Sub ->
+    DBuffer.add_int8 b 0x6B
+  S.I32Mul ->
+    DBuffer.add_int8 b 0x6C
+  S.I32Div_s ->
+    DBuffer.add_int8 b 0x6D
+  S.I32Div_u ->
+    DBuffer.add_int8 b 0x6E
+  S.I32Rem_s ->
+    DBuffer.add_int8 b 0x6F
+  S.I32Rem_u ->
+    DBuffer.add_int8 b 0x70
+  S.I32And ->
+    DBuffer.add_int8 b 0x71
+  S.I32Or ->
+    DBuffer.add_int8 b 0x72
+  S.I32Xor ->
+    DBuffer.add_int8 b 0x73
+  S.I32Shl ->
+    DBuffer.add_int8 b 0x74
+  S.I32Shr_s ->
+    DBuffer.add_int8 b 0x75
+  S.I32Shr_u ->
+    DBuffer.add_int8 b 0x76
+  S.I32Rotl ->
+    DBuffer.add_int8 b 0x77
+  S.I32Rotr ->
+    DBuffer.add_int8 b 0x78
+  S.I32Eqz ->
+    DBuffer.add_int8 b 0x45
+  S.I32Eq ->
+    DBuffer.add_int8 b 0x46
+  S.I32Ne ->
+    DBuffer.add_int8 b 0x47
+  S.I32Lt_s ->
+    DBuffer.add_int8 b 0x48
+  S.I32Lt_u ->
+    DBuffer.add_int8 b 0x49
+  S.I32Gt_s ->
+    DBuffer.add_int8 b 0x4A
+  S.I32Gt_u ->
+    DBuffer.add_int8 b 0x4B
+  S.I32Le_s ->
+    DBuffer.add_int8 b 0x4C
+  S.I32Le_u ->
+    DBuffer.add_int8 b 0x4D
+  S.I32Ge_s ->
+    DBuffer.add_int8 b 0x4E
+  S.I32Ge_u ->
+    DBuffer.add_int8 b 0x4F
+  S.I32Extend8_s ->
+    DBuffer.add_int8 b 0xC0
+  S.I32Extend16_s ->
+    DBuffer.add_int8 b 0xC1
+  S.I32Wrap_i64 ->
+    DBuffer.add_int8 b 0xA7
+  S.Drop ->
+    DBuffer.add_int8 b 0x1A
+  S.Select ->
+    DBuffer.add_int8 b 0x1B
+  S.LocalGet idx -> do
+    DBuffer.add_int8 b 0x20
+    unsigned_leb128 b idx
+  S.LocalSet idx -> do
+    DBuffer.add_int8 b 0x21
+    unsigned_leb128 b idx
+  S.LocalTee idx -> do
+    DBuffer.add_int8 b 0x22
+    unsigned_leb128 b idx
+  S.GlobalGet idx -> do
+    DBuffer.add_int8 b 0x23
+    unsigned_leb128 b idx
+  S.GlobalSet idx -> do
+    DBuffer.add_int8 b 0x24
+    unsigned_leb128 b idx
+  S.I32Load memarg -> do
+    DBuffer.add_int8 b 0x28
+    write_memarg b memarg
+  S.I32Load8_s memarg -> do
+    DBuffer.add_int8 b 0x2C
+    write_memarg b memarg
+  S.I32Load8_u memarg -> do
+    DBuffer.add_int8 b 0x2D
+    write_memarg b memarg
+  S.I32Load16_s memarg -> do
+    DBuffer.add_int8 b 0x2E
+    write_memarg b memarg
+  S.I32Load16_u memarg -> do
+    DBuffer.add_int8 b 0x2F
+    write_memarg b memarg
+  S.I32Store memarg -> do
+    DBuffer.add_int8 b 0x36
+    write_memarg b memarg
+  S.I32Store8 memarg -> do
+    DBuffer.add_int8 b 0x3A
+    write_memarg b memarg
+  S.I32Store16 memarg -> do
+    DBuffer.add_int8 b 0x3B
+    write_memarg b memarg
+  S.MemorySize -> do
+    DBuffer.add_int8 b 0x3F
+    DBuffer.add_int8 b 0x00
+  S.MemoryGrow -> do
+    DBuffer.add_int8 b 0x40
+    DBuffer.add_int8 b 0x00
+  S.Unreachable ->
+    DBuffer.add_int8 b 0x00
+  S.Nop ->
+    DBuffer.add_int8 b 0x01
+  S.Block ty instrs -> do
+    DBuffer.add_int8 b 0x02
+    write_block_type b ty
+    for_ instrs (write_instr b)
+    DBuffer.add_int8 b 0x0B
+  S.Loop ty instrs -> do
+    DBuffer.add_int8 b 0x03
+    write_block_type b ty
+    for_ instrs (write_instr b)
+    DBuffer.add_int8 b 0x0B
+  S.If ty thn els -> do
+    DBuffer.add_int8 b 0x03
+    write_block_type b ty
+    for_ thn (write_instr b)
+    unless (Array.null els) do
+      DBuffer.add_int8 b 0x05
+      for_ els (write_instr b)
+    DBuffer.add_int8 b 0x0B
+  S.Br labelidx -> do
+    DBuffer.add_int8 b 0x0C
+    unsigned_leb128 b labelidx
+  S.Br_if labelidx -> do
+    DBuffer.add_int8 b 0x0D
+    unsigned_leb128 b labelidx
+  S.Br_table labelindxs labelidx -> do
+    DBuffer.add_int8 b 0x0E
+    write_vec b (map (unsigned_leb128 b) labelindxs)
+    unsigned_leb128 b labelidx
+  S.Return ->
+    DBuffer.add_int8 b 0x0F
+  S.Call idx -> do
+    DBuffer.add_int8 b 0x10
+    unsigned_leb128 b idx
+  S.Call_Indirect type_idx -> do
+    DBuffer.add_int8 b 0x11
+    unsigned_leb128 b type_idx
+    DBuffer.add_int8 b 0x00
 
-  -- end
+write_expr :: DBuffer -> S.Expr -> Effect Unit
+write_expr b instrs = do
+  for_ instrs (write_instr b)
   DBuffer.add_int8 b 0x0B
-
-write_func :: DBuffer -> Effect Unit
-write_func b = do
-  write_vec b [ DBuffer.add_int8 b 1 *> DBuffer.add_int8 b 0x7F ]
-  write_expr b
-
-write_code :: DBuffer -> Effect Unit
-write_code b = do
-  size_offset <- reserve_size b
-  start <- DBuffer.get_position b
-  write_func b
-  end <- DBuffer.get_position b
-  write_reserved_size b size_offset (end - start)
-
-write_code_section :: DBuffer -> Effect Unit
-write_code_section b = write_section b 10 do
-  write_vec b [ write_code b ]
 
 write_section :: DBuffer -> SectionId -> Effect Unit -> Effect Unit
 write_section b id f = do
@@ -232,6 +379,22 @@ write_table_section :: DBuffer -> Array S.Table -> Effect Unit
 write_table_section b tables = write_section b 4 do
   write_vec b (map (write_table b) tables)
 
+write_mem_type :: DBuffer -> S.MemoryType -> Effect Unit
+write_mem_type b mem_ty = write_limits b mem_ty
+
+write_memory_section :: DBuffer -> Array S.Memory -> Effect Unit
+write_memory_section b memories = write_section b 5 do
+  write_vec b (map (write_mem_type b <<< _.type) memories)
+
+write_global :: DBuffer -> S.Global -> Effect Unit
+write_global b global = do
+  write_global_type b global.type
+  write_expr b global.init
+
+write_global_section :: DBuffer -> Array S.Global -> Effect Unit
+write_global_section b globals = write_section b 6 do
+  write_vec b (map (write_global b) globals)
+
 write_module :: S.Module -> Effect DBuffer
 write_module module_ = do
   b <- DBuffer.create 1024
@@ -240,5 +403,7 @@ write_module module_ = do
   unless (Array.null module_.imports) (write_import_section b module_.imports)
   unless (Array.null module_.funcs) (write_function_section b module_.funcs)
   unless (Array.null module_.tables) (write_table_section b module_.tables)
+  unless (Array.null module_.memories) (write_memory_section b module_.memories)
+  unless (Array.null module_.globals) (write_global_section b module_.globals)
   -- TODO: Continue below
   pure b
