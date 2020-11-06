@@ -1,4 +1,4 @@
-module Wasm.Encode (write_module) where
+module Wasm.Encode where
 
 import Prelude
 
@@ -351,7 +351,11 @@ write_import_desc b = case _ of
     write_global_type b global_type
 
 write_name :: DBuffer -> S.Name -> Effect Unit
-write_name = DBuffer.add_utf8
+write_name b name = do
+  buf <- DBuffer.from_utf8 name
+  len <- DBuffer.get_position buf
+  unsigned_leb128 b len
+  DBuffer.add_buffer b buf
 
 write_import :: DBuffer -> S.Import -> Effect Unit
 write_import b imp = do

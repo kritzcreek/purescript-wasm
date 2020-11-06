@@ -3,7 +3,8 @@ module DynamicBuffer
   , create
   , add_int8
   , add_buffer
-  , add_utf8
+
+  , from_utf8
 
   , get_bytes
   , get_position
@@ -100,11 +101,6 @@ from_utf8 s = do
   length <- Ref.new length'
   position <- Ref.new length'
   pure (DBuffer { bytes, length, position })
-
-add_utf8 :: DBuffer -> String -> Effect Unit
-add_utf8 b s = do
-  encoded <- from_utf8 s
-  add_buffer b encoded
 
 get_bytes :: DBuffer -> Effect Uint8Array
 get_bytes (DBuffer { bytes }) = Ref.read bytes
