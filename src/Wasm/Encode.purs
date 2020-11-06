@@ -1,8 +1,9 @@
-module Wasm.Encode where
+module Wasm.Encode (write_module) where
 
 import Prelude
 
 import Data.Array as Array
+import Data.Array.NonEmpty as NEA
 import Data.Foldable (sequence_)
 import Data.Int.Bits as Bits
 import Data.Maybe (Maybe(..))
@@ -72,6 +73,16 @@ write_reserved_size b offset s = do
   DBuffer.set b (offset + 3) chunk4
   DBuffer.set b (offset + 4) chunk5
 
+withSize :: forall a. DBuffer -> Effect a -> Effect a
+withSize b f = do
+  size_offset <- reserve_size b
+  start <- DBuffer.get_position b
+  a <- f
+  end <- DBuffer.get_position b
+  let size = end - start
+  write_reserved_size b size_offset size
+  pure a
+
 write_u32 :: DBuffer -> Int -> Effect Unit
 write_u32 = unsigned_leb128
 
@@ -110,20 +121,6 @@ write_type_section b types = write_section b 1 do
 write_function_section :: DBuffer -> Array S.Func -> Effect Unit
 write_function_section b funcs = write_section b 3 do
   write_vec b (map (write_u32 b <<< _.type) funcs)
-
-write_export :: DBuffer -> Effect Unit
-write_export b = do
-  write_vec b
-    [ DBuffer.add_int8 b 0x61
-    , DBuffer.add_int8 b 0x64
-    , DBuffer.add_int8 b 0x64
-    ]
-  DBuffer.add_int8 b 0x00
-  DBuffer.add_int8 b 0x00
-
-write_export_section :: DBuffer -> Effect Unit
-write_export_section b = write_section b 7 do
-  write_vec b [ write_export b ]
 
 write_memarg :: DBuffer -> S.MemArg -> Effect Unit
 write_memarg b { align, offset } = do
@@ -307,13 +304,7 @@ write_expr b instrs = do
 write_section :: DBuffer -> SectionId -> Effect Unit -> Effect Unit
 write_section b id f = do
   DBuffer.add_int8 b id
-  size_offset <- reserve_size b
-  start <- DBuffer.get_position b
-  f
-  end <- DBuffer.get_position b
-  let size = end - start
-  write_reserved_size b size_offset size
-  pure unit
+  withSize b f
 
 write_elem_type :: DBuffer -> S.ElemType -> Effect Unit
 write_elem_type b = case _ of
@@ -395,9 +386,72 @@ write_global_section :: DBuffer -> Array S.Global -> Effect Unit
 write_global_section b globals = write_section b 6 do
   write_vec b (map (write_global b) globals)
 
+write_export_desc :: DBuffer -> S.ExportDesc -> Effect Unit
+write_export_desc b = case _ of
+  S.ExportFunc idx -> do
+    DBuffer.add_int8 b 0x00
+    unsigned_leb128 b idx
+  S.ExportTable idx -> do
+    DBuffer.add_int8 b 0x01
+    unsigned_leb128 b idx
+  S.ExportMemory idx -> do
+    DBuffer.add_int8 b 0x02
+    unsigned_leb128 b idx
+  S.ExportGlobal idx -> do
+    DBuffer.add_int8 b 0x03
+    unsigned_leb128 b idx
+
+write_export :: DBuffer -> S.Export -> Effect Unit
+write_export b { name, desc } = do
+  write_name b name
+  write_export_desc b desc
+
+write_export_section :: DBuffer -> Array S.Export -> Effect Unit
+write_export_section b exports = write_section b 7 do
+  write_vec b (map (write_export b) exports)
+
+write_start_section :: DBuffer -> S.FuncIdx -> Effect Unit
+write_start_section b idx = write_section b 8 (unsigned_leb128 b idx)
+
+write_elem :: DBuffer -> S.Elem -> Effect Unit
+write_elem b { table, offset, init } = do
+  unsigned_leb128 b table
+  write_expr b offset
+  write_vec b (map (unsigned_leb128 b) init)
+
+write_elem_section :: DBuffer -> Array S.Elem -> Effect Unit
+write_elem_section b elems = write_section b 9 do
+  write_vec b (map (write_elem b) elems)
+
+write_locals :: DBuffer -> Array S.ValType -> Array (Effect Unit)
+write_locals b locals =
+  let grouped = Array.group' locals in
+  map (\tys -> do
+    unsigned_leb128 b (NEA.length tys)
+    write_value_type b (NEA.head tys)) grouped
+
+write_code :: DBuffer -> S.Func -> Effect Unit
+write_code b func = withSize b do
+  write_vec b (write_locals b func.locals)
+  write_expr b func.body
+
+write_code_section :: DBuffer -> Array S.Func -> Effect Unit
+write_code_section b funcs = write_section b 10 do
+  write_vec b (map (write_code b) funcs)
+
+write_data :: DBuffer -> S.Data -> Effect Unit
+write_data b dat = do
+  unsigned_leb128 b dat.data
+  write_expr b dat.offset
+  write_vec b (map (DBuffer.add_int8 b) dat.init)
+
+write_data_section :: DBuffer -> Array S.Data -> Effect Unit
+write_data_section b datas = write_section b 11 do
+  write_vec b (map (write_data b) datas)
+
 write_module :: S.Module -> Effect DBuffer
 write_module module_ = do
-  b <- DBuffer.create 1024
+  b <- DBuffer.create 8192
   write_header b
   unless (Array.null module_.types) (write_type_section b module_.types)
   unless (Array.null module_.imports) (write_import_section b module_.imports)
@@ -405,5 +459,9 @@ write_module module_ = do
   unless (Array.null module_.tables) (write_table_section b module_.tables)
   unless (Array.null module_.memories) (write_memory_section b module_.memories)
   unless (Array.null module_.globals) (write_global_section b module_.globals)
-  -- TODO: Continue below
+  unless (Array.null module_.exports) (write_export_section b module_.exports)
+  for_ module_.start (write_start_section b)
+  unless (Array.null module_.elem) (write_elem_section b module_.elem)
+  unless (Array.null module_.funcs) (write_code_section b module_.funcs)
+  unless (Array.null module_.data) (write_data_section b module_.data)
   pure b

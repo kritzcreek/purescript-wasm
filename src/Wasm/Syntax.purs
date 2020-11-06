@@ -1,9 +1,13 @@
 -- | Defines the Abstract Syntax of WebAssembly as PureScript data types
 module Wasm.Syntax where
 
+import Prelude
+
 import Data.Maybe (Maybe(..))
 
 data ValType = I32 | I64 | F32 | F64
+derive instance eqValType :: Eq ValType
+derive instance ordValType :: Ord ValType
 
 type ResultType = Array ValType
 
