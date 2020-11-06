@@ -2,10 +2,16 @@ module Main where
 
 import Prelude
 
+import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Maybe (Maybe(..))
+import Data.Nullable (Nullable)
+import Data.Nullable as Nullable
+import DynamicBuffer (DBuffer)
 import DynamicBuffer as DBuffer
 import Effect (Effect)
 import Effect.Class.Console as Console
+import Effect.Exception (Error)
+import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn3)
 import Wasm.Encode as Encode
 import Wasm.Syntax as Syntax
 
@@ -17,13 +23,24 @@ testModule =
     exports = [ { name: "myadd", desc: Syntax.ExportFunc 0 }]
   }
 
+foreign import writeToFileImpl ::
+  EffectFn3
+  String
+  Uint8Array
+  (EffectFn1 (Nullable Error) Unit)
+  Unit
+
+writeToFile :: String -> DBuffer -> (Maybe Error -> Effect Unit) -> Effect Unit
+writeToFile path buf cb = do
+  bytes <- DBuffer.getBytes buf
+  runEffectFn3 writeToFileImpl path bytes (mkEffectFn1 \err -> cb (Nullable.toMaybe err))
 
 foreign import runWasm :: String -> Effect Unit
 
 main :: Effect Unit
 main = do
   buf <- Encode.write_module testModule
-  DBuffer.writeToFile "bytes.wasm" buf case _ of
+  writeToFile "bytes.wasm" buf case _ of
     Nothing ->
       runWasm "bytes.wasm"
     Just err ->

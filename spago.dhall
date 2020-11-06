@@ -2,17 +2,16 @@
 Welcome to a Spago project!
 You can edit this file as you like.
 -}
-{ name = "my-project"
+{ name = "wasm"
 , dependencies =
     [ "console"
     , "effect"
-    , "psci-support"
     , "nullable"
     , "exceptions"
-    , "arraybuffer-types"
     , "refs"
     , "integers"
     , "arrays"
+    , "dynamic-buffer"
     ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs" ]
