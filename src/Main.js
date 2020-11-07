@@ -10,6 +10,8 @@ exports.runWasm = (file) => () => {
       WebAssembly.instantiate(module, {}).then(inst => {
         console.log("Succesfully created a Wasm module.")
         console.log(inst.exports)
+        let res = inst.exports.main()
+        console.log("Result: ", res)
       })
     });
   });
