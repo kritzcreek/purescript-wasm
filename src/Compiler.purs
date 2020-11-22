@@ -3,22 +3,27 @@ module Compiler where
 import Prelude
 
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.FoldableWithIndex (foldMapWithIndex)
 import Data.Maybe (fromJust)
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
+import Wasm.Builder as Builder
 import Wasm.Syntax as S
 
 testModule :: S.Module
-testModule = S.emptyModule
-  { types = [ { arguments: [], results: [ S.I32 ] } ]
-  , funcs = [ tmpFunction thirtyFiveSquared ]
-  , exports = [ { name: "main", desc: S.ExportFunc 0 } ]
-  }
-
-tmpFunction :: CExp -> S.Func
-tmpFunction exp =
-  let { body, locals } = compileCExp exp in
-  { type: 0, locals: Array.replicate locals S.I32, body }
+testModule =
+  let
+    moduleRes = Builder.build do
+      let { body, locals } = compileCExp thirtyFiveSquared
+      fillBody <- Builder.declareFunc
+        "ourMain"
+        { arguments: [], results: [S.I32] }
+        (Array.replicate locals S.I32)
+      fillBody body
+      Builder.declareExport "ourMain" "main" in
+  case moduleRes of
+    Left err -> unsafeCrashWith (show err)
+    Right m -> m
 
 data Expr
   = Literal Int

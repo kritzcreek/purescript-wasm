@@ -4,15 +4,18 @@ You can edit this file as you like.
 -}
 { name = "wasm"
 , dependencies =
-    [ "console"
-    , "effect"
-    , "nullable"
-    , "exceptions"
-    , "refs"
-    , "integers"
-    , "arrays"
-    , "dynamic-buffer"
-    ]
+  [ "arrays"
+  , "console"
+  , "dynamic-buffer"
+  , "effect"
+  , "exceptions"
+  , "integers"
+  , "nullable"
+  , "ordered-collections"
+  , "record"
+  , "refs"
+  , "transformers"
+  ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs" ]
 }
