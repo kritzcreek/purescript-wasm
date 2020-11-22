@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.FoldableWithIndex (foldMapWithIndex)
-import Data.Maybe (Maybe(..), fromJust)
+import Data.Maybe (fromJust)
 import Partial.Unsafe (unsafePartial)
 import Wasm.Syntax as S
 
