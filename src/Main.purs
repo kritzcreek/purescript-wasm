@@ -31,6 +31,7 @@ foreign import runWasm :: String -> Effect Unit
 
 main :: Effect Unit
 main = do
+  Console.logShow Compiler.testModule
   buf <- Encode.write_module Compiler.testModule
   writeToFile "bytes.wasm" buf case _ of
     Nothing ->

@@ -2,6 +2,7 @@ module Wasm.Builder
   ( Builder
   , BuildError(..)
   , build
+  , build'
   , declareType
   , declareGlobal
   , declareFunc
@@ -26,6 +27,7 @@ import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
+import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, GlobalIdx, GlobalType, Instruction(..), Memory, Module, Name, TypeIdx, ValType, Global, emptyModule)
 
@@ -222,3 +224,8 @@ build (Builder b) = unsafePerformEffect do
   env <- initialEnv
   _ <- runReaderT b env
   buildModule env
+
+build' :: forall name a. Show name => Builder name a -> Module
+build' b = case build b of 
+  Right m -> m
+  Left err -> unsafeCrashWith (show err)
