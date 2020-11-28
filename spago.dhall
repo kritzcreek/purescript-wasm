@@ -6,17 +6,18 @@ You can edit this file as you like.
 , dependencies =
   [ "arrays"
   , "console"
+  , "dodo-printer"
   , "dynamic-buffer"
   , "effect"
   , "exceptions"
+  , "generics-rep"
   , "integers"
   , "nullable"
   , "ordered-collections"
+  , "parsing"
   , "record"
   , "refs"
   , "transformers"
-  , "parsing"
-  , "generics-rep"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs" ]
