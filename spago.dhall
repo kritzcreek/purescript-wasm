@@ -15,6 +15,8 @@ You can edit this file as you like.
   , "record"
   , "refs"
   , "transformers"
+  , "parsing"
+  , "generics-rep"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs" ]

@@ -13,6 +13,7 @@ import Effect (Effect)
 import Effect.Class.Console as Console
 import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn3)
+import Parser as Parser
 import Wasm.Encode as Encode
 
 foreign import writeToFileImpl ::
@@ -29,12 +30,33 @@ writeToFile path buf cb = do
 
 foreign import runWasm :: String -> Effect Unit
 
+input :: String
+input = """
+fn add(x, y) {
+  x + y
+}
+
+fn fib(x) {
+  let two = 2;
+  if x < two {
+    1
+  } else {
+    add(fib(x - 1), fib(x - 2))
+  }
+}
+
+fn main() {
+  fib(10)
+}
+"""
+
 main :: Effect Unit
 main = do
-  Console.logShow Compiler.testModule
-  buf <- Encode.write_module Compiler.testModule
-  writeToFile "bytes.wasm" buf case _ of
-    Nothing ->
-      runWasm "bytes.wasm"
-    Just err ->
-      Console.log "Failed to write the wasm module"
+  Console.logShow (Parser.parseFuncs input)
+  -- Console.logShow Compiler.testModule
+  -- buf <- Encode.write_module Compiler.testModule
+  -- writeToFile "bytes.wasm" buf case _ of
+  --   Nothing ->
+  --     runWasm "bytes.wasm"
+  --   Just err ->
+  --     Console.log "Failed to write the wasm module"
