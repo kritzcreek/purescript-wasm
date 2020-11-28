@@ -269,7 +269,7 @@ write_instr b = case _ of
     for_ instrs (write_instr b)
     DBuffer.addInt8 b 0x0B
   S.If ty thn els -> do
-    DBuffer.addInt8 b 0x03
+    DBuffer.addInt8 b 0x04
     write_block_type b ty
     for_ thn (write_instr b)
     unless (Array.null els) do

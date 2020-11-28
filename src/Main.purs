@@ -4,6 +4,7 @@ import Prelude
 
 import Compiler as Compiler
 import Data.ArrayBuffer.Types (Uint8Array)
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Nullable (Nullable)
 import Data.Nullable as Nullable
@@ -14,6 +15,7 @@ import Effect.Class.Console as Console
 import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn3)
 import Parser as Parser
+import Printer as Printer
 import Wasm.Encode as Encode
 
 foreign import writeToFileImpl ::
@@ -37,8 +39,7 @@ fn add(x, y) {
 }
 
 fn fib(x) {
-  let two = 2;
-  if x < two {
+  if x < 3 {
     1
   } else {
     add(fib(x - 1), fib(x - 2))
@@ -52,11 +53,12 @@ fn main() {
 
 main :: Effect Unit
 main = do
-  Console.logShow (Parser.parseFuncs input)
-  -- Console.logShow Compiler.testModule
-  -- buf <- Encode.write_module Compiler.testModule
-  -- writeToFile "bytes.wasm" buf case _ of
-  --   Nothing ->
-  --     runWasm "bytes.wasm"
-  --   Just err ->
-  --     Console.log "Failed to write the wasm module"
+  case Parser.parseFuncs input of
+    Left err -> Console.logShow err
+    Right funcs -> do
+      buf <- Encode.write_module (Compiler.compileFuncs funcs)
+      writeToFile "bytes.wasm" buf case _ of
+          Nothing ->
+            runWasm "bytes.wasm"
+          Just err ->
+            Console.log "Failed to write the wasm module"
