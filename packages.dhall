@@ -118,5 +118,5 @@ in upstream
       , repo =
           "https://github.com/kritzcreek/purescript-dynamic-buffer.git"
       , version =
-          "v1.0.0"
+          "v2.0.0"
       }

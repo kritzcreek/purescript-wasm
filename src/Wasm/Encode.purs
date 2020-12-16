@@ -22,9 +22,9 @@ unsigned_leb128 b x =
     let seven_bits = x `Bits.and` 0x7F in
     let shifted = x `Bits.shr` 7 in
     if shifted == 0
-    then DBuffer.addInt8 b seven_bits
+    then DBuffer.addByte b seven_bits
     else do
-      DBuffer.addInt8 b (seven_bits `Bits.or` 0x80)
+      DBuffer.addByte b (seven_bits `Bits.or` 0x80)
       unsigned_leb128 b shifted
 
 signed_leb128 :: DBuffer -> Int -> Effect Unit
@@ -33,30 +33,30 @@ signed_leb128 b x =
   let shifted = x `Bits.shr` 7 in
   if (shifted == 0 && seven_bits `Bits.and` 0x40 == 0)
      || (shifted == -1 && seven_bits `Bits.and` 0x40 /= 0)
-  then DBuffer.addInt8 b seven_bits
+  then DBuffer.addByte b seven_bits
   else do
-    DBuffer.addInt8 b (seven_bits `Bits.or` 0x80)
+    DBuffer.addByte b (seven_bits `Bits.or` 0x80)
     signed_leb128 b shifted
 
 write_header :: DBuffer -> Effect Unit
 write_header b = do
-  DBuffer.addInt8 b 0x00
-  DBuffer.addInt8 b 0x61
-  DBuffer.addInt8 b 0x73
-  DBuffer.addInt8 b 0x6D
-  DBuffer.addInt8 b 0x01
-  DBuffer.addInt8 b 0x00
-  DBuffer.addInt8 b 0x00
-  DBuffer.addInt8 b 0x00
+  DBuffer.addByte b 0x00
+  DBuffer.addByte b 0x61
+  DBuffer.addByte b 0x73
+  DBuffer.addByte b 0x6D
+  DBuffer.addByte b 0x01
+  DBuffer.addByte b 0x00
+  DBuffer.addByte b 0x00
+  DBuffer.addByte b 0x00
 
 reserve_size :: DBuffer -> Effect Int
 reserve_size b = do
-  start <- DBuffer.getPosition b
-  DBuffer.addInt8 b 0
-  DBuffer.addInt8 b 0
-  DBuffer.addInt8 b 0
-  DBuffer.addInt8 b 0
-  DBuffer.addInt8 b 0
+  start <- DBuffer.size b
+  DBuffer.addByte b 0
+  DBuffer.addByte b 0
+  DBuffer.addByte b 0
+  DBuffer.addByte b 0
+  DBuffer.addByte b 0
   pure start
 
 write_reserved_size :: DBuffer -> Int -> Int -> Effect Unit
@@ -76,9 +76,9 @@ write_reserved_size b offset s = do
 withSize :: forall a. DBuffer -> Effect a -> Effect a
 withSize b f = do
   size_offset <- reserve_size b
-  start <- DBuffer.getPosition b
+  start <- DBuffer.size b
   a <- f
-  end <- DBuffer.getPosition b
+  end <- DBuffer.size b
   let size = end - start
   write_reserved_size b size_offset size
   pure a
@@ -94,12 +94,12 @@ write_vec b elements = do
 write_custom_section :: DBuffer -> Effect Unit
 write_custom_section b = do
   write_section b 0 do
-    write_vec b [ DBuffer.addInt8 b 0x50, DBuffer.addInt8 b 0x53 ]
+    write_vec b [ DBuffer.addByte b 0x50, DBuffer.addByte b 0x53 ]
 
 type SectionId = Int
 
 write_value_type :: DBuffer -> S.ValType -> Effect Unit
-write_value_type b ty = DBuffer.addInt8 b case ty of
+write_value_type b ty = DBuffer.addByte b case ty of
   S.I32 -> 0x7F
   S.I64 -> 0x7E
   S.F32 -> 0x7D
@@ -110,7 +110,7 @@ write_result_type b ty = write_vec b (map (write_value_type b) ty)
 
 write_func_type :: DBuffer -> S.FuncType -> Effect Unit
 write_func_type b { arguments, results } = do
-  DBuffer.addInt8 b 0x60
+  DBuffer.addByte b 0x60
   write_result_type b arguments
   write_result_type b results
 
@@ -130,7 +130,7 @@ write_memarg b { align, offset } = do
 write_block_type :: DBuffer -> S.BlockType -> Effect Unit
 write_block_type b = case _ of
   S.BlockValType Nothing ->
-    DBuffer.addInt8 b 0x40
+    DBuffer.addByte b 0x40
   S.BlockValType (Just ty) ->
     write_value_type b ty
   S.BlockTypeIdx idx ->
@@ -139,184 +139,184 @@ write_block_type b = case _ of
 write_instr :: DBuffer -> S.Instruction -> Effect Unit
 write_instr b = case _ of
   S.I32Const n -> do
-    DBuffer.addInt8 b 0x41
+    DBuffer.addByte b 0x41
     signed_leb128 b n
   S.I32Clz ->
-    DBuffer.addInt8 b 0x67
+    DBuffer.addByte b 0x67
   S.I32Ctz ->
-    DBuffer.addInt8 b 0x68
+    DBuffer.addByte b 0x68
   S.I32Popcnt ->
-    DBuffer.addInt8 b 0x69
+    DBuffer.addByte b 0x69
   S.I32Add ->
-    DBuffer.addInt8 b 0x6A
+    DBuffer.addByte b 0x6A
   S.I32Sub ->
-    DBuffer.addInt8 b 0x6B
+    DBuffer.addByte b 0x6B
   S.I32Mul ->
-    DBuffer.addInt8 b 0x6C
+    DBuffer.addByte b 0x6C
   S.I32Div_s ->
-    DBuffer.addInt8 b 0x6D
+    DBuffer.addByte b 0x6D
   S.I32Div_u ->
-    DBuffer.addInt8 b 0x6E
+    DBuffer.addByte b 0x6E
   S.I32Rem_s ->
-    DBuffer.addInt8 b 0x6F
+    DBuffer.addByte b 0x6F
   S.I32Rem_u ->
-    DBuffer.addInt8 b 0x70
+    DBuffer.addByte b 0x70
   S.I32And ->
-    DBuffer.addInt8 b 0x71
+    DBuffer.addByte b 0x71
   S.I32Or ->
-    DBuffer.addInt8 b 0x72
+    DBuffer.addByte b 0x72
   S.I32Xor ->
-    DBuffer.addInt8 b 0x73
+    DBuffer.addByte b 0x73
   S.I32Shl ->
-    DBuffer.addInt8 b 0x74
+    DBuffer.addByte b 0x74
   S.I32Shr_s ->
-    DBuffer.addInt8 b 0x75
+    DBuffer.addByte b 0x75
   S.I32Shr_u ->
-    DBuffer.addInt8 b 0x76
+    DBuffer.addByte b 0x76
   S.I32Rotl ->
-    DBuffer.addInt8 b 0x77
+    DBuffer.addByte b 0x77
   S.I32Rotr ->
-    DBuffer.addInt8 b 0x78
+    DBuffer.addByte b 0x78
   S.I32Eqz ->
-    DBuffer.addInt8 b 0x45
+    DBuffer.addByte b 0x45
   S.I32Eq ->
-    DBuffer.addInt8 b 0x46
+    DBuffer.addByte b 0x46
   S.I32Ne ->
-    DBuffer.addInt8 b 0x47
+    DBuffer.addByte b 0x47
   S.I32Lt_s ->
-    DBuffer.addInt8 b 0x48
+    DBuffer.addByte b 0x48
   S.I32Lt_u ->
-    DBuffer.addInt8 b 0x49
+    DBuffer.addByte b 0x49
   S.I32Gt_s ->
-    DBuffer.addInt8 b 0x4A
+    DBuffer.addByte b 0x4A
   S.I32Gt_u ->
-    DBuffer.addInt8 b 0x4B
+    DBuffer.addByte b 0x4B
   S.I32Le_s ->
-    DBuffer.addInt8 b 0x4C
+    DBuffer.addByte b 0x4C
   S.I32Le_u ->
-    DBuffer.addInt8 b 0x4D
+    DBuffer.addByte b 0x4D
   S.I32Ge_s ->
-    DBuffer.addInt8 b 0x4E
+    DBuffer.addByte b 0x4E
   S.I32Ge_u ->
-    DBuffer.addInt8 b 0x4F
+    DBuffer.addByte b 0x4F
   S.I32Extend8_s ->
-    DBuffer.addInt8 b 0xC0
+    DBuffer.addByte b 0xC0
   S.I32Extend16_s ->
-    DBuffer.addInt8 b 0xC1
+    DBuffer.addByte b 0xC1
   S.I32Wrap_i64 ->
-    DBuffer.addInt8 b 0xA7
+    DBuffer.addByte b 0xA7
   S.Drop ->
-    DBuffer.addInt8 b 0x1A
+    DBuffer.addByte b 0x1A
   S.Select ->
-    DBuffer.addInt8 b 0x1B
+    DBuffer.addByte b 0x1B
   S.LocalGet idx -> do
-    DBuffer.addInt8 b 0x20
+    DBuffer.addByte b 0x20
     unsigned_leb128 b idx
   S.LocalSet idx -> do
-    DBuffer.addInt8 b 0x21
+    DBuffer.addByte b 0x21
     unsigned_leb128 b idx
   S.LocalTee idx -> do
-    DBuffer.addInt8 b 0x22
+    DBuffer.addByte b 0x22
     unsigned_leb128 b idx
   S.GlobalGet idx -> do
-    DBuffer.addInt8 b 0x23
+    DBuffer.addByte b 0x23
     unsigned_leb128 b idx
   S.GlobalSet idx -> do
-    DBuffer.addInt8 b 0x24
+    DBuffer.addByte b 0x24
     unsigned_leb128 b idx
   S.I32Load memarg -> do
-    DBuffer.addInt8 b 0x28
+    DBuffer.addByte b 0x28
     write_memarg b memarg
   S.I32Load8_s memarg -> do
-    DBuffer.addInt8 b 0x2C
+    DBuffer.addByte b 0x2C
     write_memarg b memarg
   S.I32Load8_u memarg -> do
-    DBuffer.addInt8 b 0x2D
+    DBuffer.addByte b 0x2D
     write_memarg b memarg
   S.I32Load16_s memarg -> do
-    DBuffer.addInt8 b 0x2E
+    DBuffer.addByte b 0x2E
     write_memarg b memarg
   S.I32Load16_u memarg -> do
-    DBuffer.addInt8 b 0x2F
+    DBuffer.addByte b 0x2F
     write_memarg b memarg
   S.I32Store memarg -> do
-    DBuffer.addInt8 b 0x36
+    DBuffer.addByte b 0x36
     write_memarg b memarg
   S.I32Store8 memarg -> do
-    DBuffer.addInt8 b 0x3A
+    DBuffer.addByte b 0x3A
     write_memarg b memarg
   S.I32Store16 memarg -> do
-    DBuffer.addInt8 b 0x3B
+    DBuffer.addByte b 0x3B
     write_memarg b memarg
   S.MemorySize -> do
-    DBuffer.addInt8 b 0x3F
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x3F
+    DBuffer.addByte b 0x00
   S.MemoryGrow -> do
-    DBuffer.addInt8 b 0x40
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x40
+    DBuffer.addByte b 0x00
   S.Unreachable ->
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x00
   S.Nop ->
-    DBuffer.addInt8 b 0x01
+    DBuffer.addByte b 0x01
   S.Block ty instrs -> do
-    DBuffer.addInt8 b 0x02
+    DBuffer.addByte b 0x02
     write_block_type b ty
     for_ instrs (write_instr b)
-    DBuffer.addInt8 b 0x0B
+    DBuffer.addByte b 0x0B
   S.Loop ty instrs -> do
-    DBuffer.addInt8 b 0x03
+    DBuffer.addByte b 0x03
     write_block_type b ty
     for_ instrs (write_instr b)
-    DBuffer.addInt8 b 0x0B
+    DBuffer.addByte b 0x0B
   S.If ty thn els -> do
-    DBuffer.addInt8 b 0x04
+    DBuffer.addByte b 0x04
     write_block_type b ty
     for_ thn (write_instr b)
     unless (Array.null els) do
-      DBuffer.addInt8 b 0x05
+      DBuffer.addByte b 0x05
       for_ els (write_instr b)
-    DBuffer.addInt8 b 0x0B
+    DBuffer.addByte b 0x0B
   S.Br labelidx -> do
-    DBuffer.addInt8 b 0x0C
+    DBuffer.addByte b 0x0C
     unsigned_leb128 b labelidx
   S.Br_if labelidx -> do
-    DBuffer.addInt8 b 0x0D
+    DBuffer.addByte b 0x0D
     unsigned_leb128 b labelidx
   S.Br_table labelindxs labelidx -> do
-    DBuffer.addInt8 b 0x0E
+    DBuffer.addByte b 0x0E
     write_vec b (map (unsigned_leb128 b) labelindxs)
     unsigned_leb128 b labelidx
   S.Return ->
-    DBuffer.addInt8 b 0x0F
+    DBuffer.addByte b 0x0F
   S.Call idx -> do
-    DBuffer.addInt8 b 0x10
+    DBuffer.addByte b 0x10
     unsigned_leb128 b idx
   S.Call_Indirect type_idx -> do
-    DBuffer.addInt8 b 0x11
+    DBuffer.addByte b 0x11
     unsigned_leb128 b type_idx
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x00
 
 write_expr :: DBuffer -> S.Expr -> Effect Unit
 write_expr b instrs = do
   for_ instrs (write_instr b)
-  DBuffer.addInt8 b 0x0B
+  DBuffer.addByte b 0x0B
 
 write_section :: DBuffer -> SectionId -> Effect Unit -> Effect Unit
 write_section b id f = do
-  DBuffer.addInt8 b id
+  DBuffer.addByte b id
   withSize b f
 
 write_elem_type :: DBuffer -> S.ElemType -> Effect Unit
 write_elem_type b = case _ of
-  S.FuncRef -> DBuffer.addInt8 b 0x70
+  S.FuncRef -> DBuffer.addByte b 0x70
 
 write_limits :: DBuffer -> S.Limits -> Effect Unit
 write_limits b { min, max } = case max of
   Nothing -> do
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x00
     unsigned_leb128 b min
   Just max' -> do
-    DBuffer.addInt8 b 0x01
+    DBuffer.addByte b 0x01
     unsigned_leb128 b min
     unsigned_leb128 b max'
 
@@ -326,7 +326,7 @@ write_table_type b { limits, elemtype } = do
   write_limits b limits
 
 write_mutability :: DBuffer -> S.Mutability -> Effect Unit
-write_mutability b mut = DBuffer.addInt8 b case mut of
+write_mutability b mut = DBuffer.addByte b case mut of
   S.Const -> 0x00
   S.Var -> 0x01
 
@@ -338,22 +338,22 @@ write_global_type b { mutability, type: ty } = do
 write_import_desc :: DBuffer -> S.ImportDesc -> Effect Unit
 write_import_desc b = case _ of
   S.ImportFunc ix -> do
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x00
     unsigned_leb128 b ix
   S.ImportTable table_type -> do
-    DBuffer.addInt8 b 0x01
+    DBuffer.addByte b 0x01
     write_table_type b table_type
   S.ImportMemory limits -> do
-    DBuffer.addInt8 b 0x02
+    DBuffer.addByte b 0x02
     write_limits b limits
   S.ImportGlobal global_type -> do
-    DBuffer.addInt8 b 0x03
+    DBuffer.addByte b 0x03
     write_global_type b global_type
 
 write_name :: DBuffer -> S.Name -> Effect Unit
 write_name b name = do
   buf <- DBuffer.fromUtf8 name
-  len <- DBuffer.getPosition buf
+  len <- DBuffer.size buf
   unsigned_leb128 b len
   DBuffer.addBuffer b buf
 
@@ -393,16 +393,16 @@ write_global_section b globals = write_section b 6 do
 write_export_desc :: DBuffer -> S.ExportDesc -> Effect Unit
 write_export_desc b = case _ of
   S.ExportFunc idx -> do
-    DBuffer.addInt8 b 0x00
+    DBuffer.addByte b 0x00
     unsigned_leb128 b idx
   S.ExportTable idx -> do
-    DBuffer.addInt8 b 0x01
+    DBuffer.addByte b 0x01
     unsigned_leb128 b idx
   S.ExportMemory idx -> do
-    DBuffer.addInt8 b 0x02
+    DBuffer.addByte b 0x02
     unsigned_leb128 b idx
   S.ExportGlobal idx -> do
-    DBuffer.addInt8 b 0x03
+    DBuffer.addByte b 0x03
     unsigned_leb128 b idx
 
 write_export :: DBuffer -> S.Export -> Effect Unit
@@ -447,7 +447,7 @@ write_data :: DBuffer -> S.Data -> Effect Unit
 write_data b dat = do
   unsigned_leb128 b dat.data
   write_expr b dat.offset
-  write_vec b (map (DBuffer.addInt8 b) dat.init)
+  write_vec b (map (DBuffer.addByte b) dat.init)
 
 write_data_section :: DBuffer -> Array S.Data -> Effect Unit
 write_data_section b datas = write_section b 11 do

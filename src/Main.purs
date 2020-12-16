@@ -15,7 +15,6 @@ import Effect.Class.Console as Console
 import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn3)
 import Parser as Parser
-import Printer as Printer
 import Wasm.Encode as Encode
 
 foreign import writeToFileImpl ::
@@ -27,7 +26,7 @@ foreign import writeToFileImpl ::
 
 writeToFile :: String -> DBuffer -> (Maybe Error -> Effect Unit) -> Effect Unit
 writeToFile path buf cb = do
-  bytes <- DBuffer.getBytes buf
+  bytes <- DBuffer.unsafeContents buf
   runEffectFn3 writeToFileImpl path bytes (mkEffectFn1 \err -> cb (Nullable.toMaybe err))
 
 foreign import runWasm :: String -> Effect Unit
