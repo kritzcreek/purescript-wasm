@@ -175,7 +175,7 @@ data BlockType = BlockTypeIdx TypeIdx | BlockValType (Maybe ValType)
 
 instance showBlockType :: Show BlockType where
   show = case _ of
-    BlockTypeIdx x -> show x 
+    BlockTypeIdx x -> show x
     BlockValType x -> show x
 
 type Func =
@@ -266,7 +266,7 @@ instance showExportDesc :: Show ExportDesc where
     ExportFunc x -> "ExportFunc " <> show x
     ExportTable x -> "ExportTable " <> show x
     ExportMemory x -> "ExportMemory " <> show x
-    ExportGlobal x -> "ExportGlobal " <> show x  
+    ExportGlobal x -> "ExportGlobal " <> show x
 
 type Export =
   { name :: Name
