@@ -71,7 +71,7 @@ compileExpr locals = case _ of
     call <- Builder.callFunc func
     in (Array.fold args' <> [call])
 
-compileBody in::
+compileBody ::
   Locals ->
   Array (AST.Decl String) ->
   Builder { expr :: Array S.Instruction, locals :: Array S.ValType }

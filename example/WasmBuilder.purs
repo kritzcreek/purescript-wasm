@@ -1,4 +1,4 @@
-module Wasm.Builder
+module WasmBuilder
   ( Builder
   , BuildError(..)
   , build
