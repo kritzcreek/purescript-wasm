@@ -31,6 +31,11 @@ derive instance genericDecl :: Generic (Decl a) _
 instance showDecl :: Show a => Show (Decl a) where
   show x = genericShow x
 
+isLetD :: forall a. Decl a -> Boolean
+isLetD = case _ of
+  LetD _ _ -> true
+  _ -> false
+
 data Func a
   = Func a (Array a) (Array (Decl a))
 
