@@ -8,8 +8,6 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Nullable (Nullable)
 import Data.Nullable as Nullable
-import DynamicBuffer (DBuffer)
-import DynamicBuffer as DBuffer
 import Effect (Effect)
 import Effect.Class.Console as Console
 import Effect.Exception (Error)
@@ -24,9 +22,8 @@ foreign import writeToFileImpl ::
   (EffectFn1 (Nullable Error) Unit)
   Unit
 
-writeToFile :: String -> DBuffer -> (Maybe Error -> Effect Unit) -> Effect Unit
-writeToFile path buf cb = do
-  bytes <- DBuffer.unsafeContents buf
+writeToFile :: String -> Uint8Array -> (Maybe Error -> Effect Unit) -> Effect Unit
+writeToFile path bytes cb =
   runEffectFn3 writeToFileImpl path bytes (mkEffectFn1 \err -> cb (Nullable.toMaybe err))
 
 foreign import runWasm :: String -> Effect Unit
@@ -55,8 +52,8 @@ main = do
   case Parser.parseFuncs input of
     Left err -> Console.logShow err
     Right funcs -> do
-      buf <- Encode.write_module (Compiler.compileFuncs funcs)
-      writeToFile "bytes.wasm" buf case _ of
+      let bytes = Encode.encodeModule (Compiler.compileFuncs funcs)
+      writeToFile "bytes.wasm" bytes case _ of
           Nothing ->
             runWasm "bytes.wasm"
           Just err ->

@@ -1,9 +1,10 @@
-module Wasm.Encode where
+module Wasm.Encode (encodeModule) where
 
 import Prelude
 
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
+import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Foldable (sequence_)
 import Data.Int.Bits as Bits
 import Data.Maybe (Maybe(..))
@@ -11,6 +12,7 @@ import Data.Traversable (for_)
 import DynamicBuffer (DBuffer)
 import DynamicBuffer as DBuffer
 import Effect (Effect)
+import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Wasm.Syntax as S
 
@@ -469,3 +471,9 @@ write_module module_ = do
   unless (Array.null module_.funcs) (write_code_section b module_.funcs)
   unless (Array.null module_.data) (write_data_section b module_.data)
   pure b
+
+-- | Encodes a Wasm module into its binary representation.
+encodeModule :: S.Module -> Uint8Array
+encodeModule module_ = unsafePerformEffect do
+  buf <- write_module module_
+  DBuffer.unsafeContents buf

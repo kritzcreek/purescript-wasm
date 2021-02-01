@@ -1,4 +1,6 @@
 -- | Defines the Abstract Syntax of WebAssembly as PureScript data types
+-- |
+-- | Follows: https://webassembly.github.io/spec/core/syntax/index.html
 module Wasm.Syntax where
 
 import Prelude
