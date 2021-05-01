@@ -63,7 +63,6 @@ reserve_size b = do
 
 write_reserved_size :: DBuffer -> Int -> Int -> Effect Unit
 write_reserved_size b offset s = do
-  let size = s + 0
   let chunk1 = (s `Bits.and` 0x7f) `Bits.or` 0x80
   let chunk2 = ((Bits.shr s 7) `Bits.and` 0x7f) `Bits.or` 0x80
   let chunk3 = ((Bits.shr s 14) `Bits.and` 0x7f) `Bits.or` 0x80
@@ -92,11 +91,6 @@ write_vec :: DBuffer -> Array (Effect Unit) -> Effect Unit
 write_vec b elements = do
   write_u32 b (Array.length elements)
   sequence_ elements
-
-write_custom_section :: DBuffer -> Effect Unit
-write_custom_section b = do
-  write_section b 0 do
-    write_vec b [ DBuffer.addByte b 0x50, DBuffer.addByte b 0x53 ]
 
 type SectionId = Int
 
@@ -431,7 +425,7 @@ write_elem_section b elems = write_section b 9 do
 
 write_locals :: DBuffer -> Array S.ValType -> Array (Effect Unit)
 write_locals b locals =
-  let grouped = Array.group' locals in
+  let grouped = Array.groupAll locals in
   map (\tys -> do
     unsigned_leb128 b (NEA.length tys)
     write_value_type b (NEA.head tys)) grouped

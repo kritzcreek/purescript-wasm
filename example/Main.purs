@@ -57,4 +57,4 @@ main = do
           Nothing ->
             runWasm "bytes.wasm"
           Just err ->
-            Console.log "Failed to write the wasm module"
+            Console.log ("Failed to write the wasm module" <> show err)

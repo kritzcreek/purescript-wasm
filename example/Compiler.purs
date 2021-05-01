@@ -9,21 +9,9 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, traverse_)
-import Partial.Unsafe (unsafeCrashWith, unsafePartialBecause)
-import WasmBuilder as Builder
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Wasm.Syntax as S
-
--- fn fib(x) {
---   if x < 2 {
---     1
---   } else {
---     add(fib(x - 1), fib(x - 2))
---   }
--- }
-
--- fn main() {
---   fib(10)
--- }
+import WasmBuilder as Builder
 
 type Builder = Builder.Builder String
 
@@ -49,8 +37,7 @@ compileOp = case _ of
 
 lookupLocal :: String -> Locals -> S.LocalIdx
 lookupLocal x ls =
-  unsafePartialBecause ("Unknown local variable: " <> x)
-    fromJust (Map.lookup x ls)
+  unsafePartial fromJust (Map.lookup x ls)
 
 compileExpr :: Locals -> AST.Expr String -> Builder (Array S.Instruction)
 compileExpr locals = case _ of
@@ -108,7 +95,7 @@ declareFunc ::
     { fill :: Array S.ValType -> S.Expr -> Builder Unit
     , func :: AST.Func String
     }
-declareFunc func@(AST.Func name params body) = do
+declareFunc func@(AST.Func name params _) = do
   fill <- Builder.declareFunc
     name
     { arguments: map (const S.I32) params

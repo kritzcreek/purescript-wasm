@@ -4,7 +4,6 @@ import Prelude
 
 import AST (Decl(..), Expr(..), Func(..), Op(..))
 import Data.Array as Array
-import Data.Foldable (class Foldable)
 import Dodo (Doc, break, encloseEmptyAlt, flexAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
 import Dodo.Common as C
@@ -80,5 +79,5 @@ parens = flexGroup <<< encloseEmptyAlt open close (text "()") <<< indent
   open = flexAlt (text "(") (text "(" <> break)
   close = flexAlt (text ")") (break <> text ")")
 
-commaSep :: forall a f. Foldable f => f (Doc a) -> Doc a
+commaSep :: forall a. Array (Doc a) -> Doc a
 commaSep = flexGroup <<< Array.intercalate C.trailingComma
