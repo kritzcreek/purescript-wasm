@@ -8,6 +8,11 @@ module WasmBuilder
   , declareFunc
   , declareExport
   , callFunc
+  , fresh
+  , BodyBuilder
+  , bodyBuild
+  , newLocal
+  , addInstructions
   ) where
 
 import Prelude
@@ -61,6 +66,7 @@ type Env name =
   , types :: Ref (Array FuncType)
   , memory :: Ref (Maybe Memory)
   , exports :: Ref (Array Export)
+  , freshSupply :: Ref Int
   }
 
 initialEnv :: forall name. Effect (Env name)
@@ -72,7 +78,8 @@ initialEnv = ado
   types <- Ref.new []
   memory <- Ref.new Nothing
   exports <- Ref.new []
-  in { funcs, funcsSupply, globals, globalsSupply, types, memory, exports }
+  freshSupply <- Ref.new (-1)
+  in { funcs, funcsSupply, globals, globalsSupply, types, memory, exports, freshSupply }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -84,6 +91,9 @@ derive newtype instance monadBuilder :: Monad (Builder name)
 
 mkBuilder :: forall name a. (Env name -> Effect a) -> Builder name a
 mkBuilder act = Builder (ReaderT act)
+
+fresh :: forall name. Builder name Int
+fresh = mkBuilder \{ freshSupply } -> Ref.modify (_ + 1) freshSupply
 
 declareType :: forall name. FuncType -> Builder name TypeIdx
 declareType ty = mkBuilder \{ types } -> do
@@ -109,7 +119,7 @@ declareGlobal ::
   Builder name GlobalIdx
 declareGlobal name ty init = do
   index <- nextGlobalIdx
-  mkBuilder \{ globals, globalsSupply } -> do
+  mkBuilder \{ globals } -> do
     gs <- Ref.read globals
     when (Map.member name gs) do
       throw ("double declaring global: " <> show name)
@@ -173,7 +183,7 @@ buildFuncs ::
   Show name =>
   Env name ->
   Effect (Either (BuildError name) (Array Func))
-buildFuncs { funcs, types } = do
+buildFuncs { funcs } = do
   fs <- map Map.toUnfoldable (Ref.read funcs)
   let sortedFuncs = Array.sortWith (_.index <<< Tuple.snd) fs
   pure (traverse toWasmFunc sortedFuncs)

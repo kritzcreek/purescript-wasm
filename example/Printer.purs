@@ -52,6 +52,8 @@ renderExpr = case _ of
     curlies (renderExpr e)
   Call func args ->
     text func <> parens (commaSep (map renderExpr args))
+  Lambda args body ->
+    text "fn" <> parens (commaSep (map text args)) <> curlies (renderExpr body)
 
 renderDecl :: forall a. Decl String -> Doc a
 renderDecl = case _ of

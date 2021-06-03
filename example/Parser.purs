@@ -50,6 +50,9 @@ atom e =
   map IntLit l.integer <|>
   l.reserved "true" $> BoolLit true <|>
   l.reserved "false" $> BoolLit true <|>
+  Lambda <$>
+    (l.reserved "fn" *> l.parens (map Array.fromFoldable (l.commaSep l.identifier))) <*>
+    l.braces expr <|>
   If <$> (l.reserved "if" *> e) <*> l.braces e <*> (l.reserved "else" *> l.braces e) <|>
   (l.identifier >>= \ident -> call e ident <|> pure (Var ident))
 

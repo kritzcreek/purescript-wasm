@@ -18,6 +18,7 @@ data Expr a
   | BinOp Op (Expr a) (Expr a)
   | If (Expr a) (Expr a) (Expr a)
   | Call a (Array (Expr a))
+  | Lambda (Array a) (Array (Decl a))
 
 derive instance genericExpr :: Generic (Expr a) _
 instance showExpr :: Show a => Show (Expr a) where

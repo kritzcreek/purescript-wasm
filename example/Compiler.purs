@@ -57,6 +57,9 @@ compileExpr locals = case _ of
     args' <- traverse (compileExpr locals) args
     call <- Builder.callFunc func
     in (Array.fold args' <> [call])
+  AST.Lambda params body -> do
+    funcName <- map (("$lambda" <> _) <<< show) Builder.fresh
+    pure []
 
 compileBody ::
   Locals ->
