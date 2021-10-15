@@ -5,12 +5,14 @@
   "main": "index.js",
   "scripts": {
     "build": "spago -x example.dhall build",
-    "run": "spago -x example.dhall run"
+    "run": "spago -x example.dhall run",
+    "format": "purs-tidy format-in-place 'src/**/*.purs'"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "purescript": "^0.14.1",
+    "purs-tidy": "^0.5.4",
     "spago": "^0.20.1"
   }
 }
