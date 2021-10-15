@@ -52,7 +52,7 @@ compileExpr locals = case _ of
     cond' <- compileExpr locals cond
     t' <- compileExpr locals t
     e' <- compileExpr locals e
-    in cond' <> [S.If (S.BlockValType (Just S.I32)) t' e']
+    in cond' <> [S.If (S.BlockValType (Just (S.NumType S.I32))) t' e']
   AST.Call func args -> ado
     args' <- traverse (compileExpr locals) args
     call <- Builder.callFunc func
@@ -86,7 +86,7 @@ compileBody params decls =
         in
           { locals: Map.insert n index locals
           , instrs: instrs <> is <> [ S.LocalSet index ]
-          , newLocals: Array.snoc newLocals S.I32
+          , newLocals: Array.snoc newLocals (S.NumType S.I32)
           }
 
 declareFunc ::
@@ -98,8 +98,8 @@ declareFunc ::
 declareFunc func@(AST.Func name params _) = do
   fill <- Builder.declareFunc
     name
-    { arguments: map (const S.I32) params
-    , results: [S.I32]
+    { arguments: map (const (S.NumType S.I32)) params
+    , results: [S.NumType S.I32]
     }
   pure { fill, func }
 

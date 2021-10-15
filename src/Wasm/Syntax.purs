@@ -7,17 +7,34 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 
-data ValType = I32 | I64 | F32 | F64
+data RefType = FuncRef | ExternRef
 
-derive instance eqValType :: Eq ValType
-derive instance ordValType :: Ord ValType
+derive instance eqRefType :: Eq RefType
+derive instance ordRefType :: Ord RefType
+instance showRefType :: Show RefType where
+  show = case _ of
+    FuncRef -> "funcref"
+    ExternRef -> "externref"
 
-instance showValType :: Show ValType where
+data NumType = I32 | I64 | F32 | F64
+
+derive instance eqNumType :: Eq NumType
+derive instance ordNumType :: Ord NumType
+instance showNumType :: Show NumType where
   show = case _ of
     I32 -> "i32"
     I64 -> "i64"
     F32 -> "f64"
     F64 -> "f64"
+
+data ValType = NumType NumType | RefType RefType
+
+derive instance eqValType :: Eq ValType
+derive instance ordValType :: Ord ValType
+instance showValType :: Show ValType where
+  show = case _ of
+    NumType n -> show n
+    RefType r -> show r
 
 type ResultType = Array ValType
 
@@ -188,14 +205,10 @@ type Func =
   }
 
 type Limits = { min :: Int, max :: Maybe Int }
-data ElemType = FuncRef
-
-instance showElemType :: Show ElemType where
-  show FuncRef = "funcref"
 
 type TableType =
   { limits :: Limits
-  , elemtype :: ElemType
+  , elemtype :: RefType
   }
 
 type Table =

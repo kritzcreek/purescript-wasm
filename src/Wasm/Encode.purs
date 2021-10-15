@@ -101,12 +101,17 @@ write_vec b elements = do
 
 type SectionId = Int
 
-write_value_type :: DBuffer -> S.ValType -> Effect Unit
-write_value_type b ty = DBuffer.addByte b case ty of
+write_num_type :: DBuffer -> S.NumType -> Effect Unit
+write_num_type b ty = DBuffer.addByte b case ty of
   S.I32 -> 0x7F
   S.I64 -> 0x7E
   S.F32 -> 0x7D
   S.F64 -> 0x7C
+
+write_value_type :: DBuffer -> S.ValType -> Effect Unit
+write_value_type b = case _ of
+  S.NumType ty -> write_num_type b ty
+  S.RefType ty -> write_ref_type b ty
 
 write_result_type :: DBuffer -> S.ResultType -> Effect Unit
 write_result_type b ty = write_vec b (map (write_value_type b) ty)
@@ -309,10 +314,6 @@ write_section b id f = do
   DBuffer.addByte b id
   withSize b f
 
-write_elem_type :: DBuffer -> S.ElemType -> Effect Unit
-write_elem_type b = case _ of
-  S.FuncRef -> DBuffer.addByte b 0x70
-
 write_limits :: DBuffer -> S.Limits -> Effect Unit
 write_limits b { min, max } = case max of
   Nothing -> do
@@ -323,9 +324,14 @@ write_limits b { min, max } = case max of
     write_u32 b min
     write_u32 b max'
 
+write_ref_type :: DBuffer -> S.RefType -> Effect Unit
+write_ref_type b = case _ of
+  S.FuncRef -> DBuffer.addByte b 0x70
+  S.ExternRef -> DBuffer.addByte b 0x6F
+
 write_table_type :: DBuffer -> S.TableType -> Effect Unit
 write_table_type b { limits, elemtype } = do
-  write_elem_type b elemtype
+  write_ref_type b elemtype
   write_limits b limits
 
 write_mutability :: DBuffer -> S.Mutability -> Effect Unit
