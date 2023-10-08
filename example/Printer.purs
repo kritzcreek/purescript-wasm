@@ -62,17 +62,11 @@ renderDecl = case _ of
     renderExpr expr
 
 renderFunc :: forall a. Func String -> Doc a
-renderFunc (Func name params body) =
-  let
-    headerD = text "fn" <+> text name
-  in
-    let
-      paramD = parens (commaSep (map text params))
-    in
-      let
-        bodyD = D.foldWithSeparator (text ";" <> break) (map renderDecl body)
-      in
-        headerD <> paramD <+> curlies bodyD
+renderFunc (Func name params body) = do
+  let headerD = text "fn" <+> text name
+  let paramD = parens (commaSep (map text params))
+  let bodyD = D.foldWithSeparator (text ";" <> break) (map renderDecl body)
+  headerD <> paramD <+> curlies bodyD
 
 curlies :: forall a. Doc a -> Doc a
 curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
