@@ -20,32 +20,25 @@ import Wasm.Syntax as S
 unsigned_leb128 :: DBuffer -> Int -> Effect Unit
 unsigned_leb128 b x =
   if x < 0 then unsafeCrashWith "Negative unsigned_leb128"
-  else
-    let
-      seven_bits = x `Bits.and` 0x7F
-    in
-      let
-        shifted = x `Bits.shr` 7
-      in
-        if shifted == 0 then DBuffer.addByte b seven_bits
-        else do
-          DBuffer.addByte b (seven_bits `Bits.or` 0x80)
-          unsigned_leb128 b shifted
+  else do
+    let seven_bits = x `Bits.and` 0x7F
+    let shifted = x `Bits.shr` 7
+    if shifted == 0 then
+      DBuffer.addByte b seven_bits
+    else do
+      DBuffer.addByte b (seven_bits `Bits.or` 0x80)
+      unsigned_leb128 b shifted
 
 signed_leb128 :: DBuffer -> Int -> Effect Unit
-signed_leb128 b x =
-  let
-    seven_bits = x `Bits.and` 0x7F
-  in
-    let
-      shifted = x `Bits.shr` 7
-    in
-      if
-        (shifted == 0 && seven_bits `Bits.and` 0x40 == 0)
-          || (shifted == -1 && seven_bits `Bits.and` 0x40 /= 0) then DBuffer.addByte b seven_bits
-      else do
-        DBuffer.addByte b (seven_bits `Bits.or` 0x80)
-        signed_leb128 b shifted
+signed_leb128 b x = do
+  let seven_bits = x `Bits.and` 0x7F
+  let shifted = x `Bits.shr` 7
+  if
+    (shifted == 0 && seven_bits `Bits.and` 0x40 == 0)
+      || (shifted == -1 && seven_bits `Bits.and` 0x40 /= 0) then DBuffer.addByte b seven_bits
+  else do
+    DBuffer.addByte b (seven_bits `Bits.or` 0x80)
+    signed_leb128 b shifted
 
 write_header :: DBuffer -> Effect Unit
 write_header b = do
