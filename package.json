@@ -6,7 +6,7 @@
   "scripts": {
     "build": "spago -x example.dhall build",
     "run": "spago -x example.dhall run",
-    "format": "purs-tidy format-in-place 'src/**/*.purs'"
+    "format": "purs-tidy format-in-place src"
   },
   "author": "",
   "license": "ISC",
