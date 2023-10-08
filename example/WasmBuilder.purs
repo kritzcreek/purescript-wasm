@@ -8,6 +8,11 @@ module WasmBuilder
   , declareFunc
   , declareExport
   , callFunc
+
+  , BodyBuilder
+  , bodyBuild
+  , newLocal
+  , addInstructions
   ) where
 
 import Prelude
@@ -109,7 +114,7 @@ declareGlobal ::
   Builder name GlobalIdx
 declareGlobal name ty init = do
   index <- nextGlobalIdx
-  mkBuilder \{ globals, globalsSupply } -> do
+  mkBuilder \{ globals } -> do
     gs <- Ref.read globals
     when (Map.member name gs) do
       throw ("double declaring global: " <> show name)
@@ -173,7 +178,7 @@ buildFuncs ::
   Show name =>
   Env name ->
   Effect (Either (BuildError name) (Array Func))
-buildFuncs { funcs, types } = do
+buildFuncs { funcs } = do
   fs <- map Map.toUnfoldable (Ref.read funcs)
   let sortedFuncs = Array.sortWith (_.index <<< Tuple.snd) fs
   pure (traverse toWasmFunc sortedFuncs)
@@ -250,7 +255,7 @@ initialBodyEnv :: forall name. Array name -> Effect (BodyEnv name)
 initialBodyEnv params = ado
   locals <- Ref.new Map.empty
   instrs <- Ref.new []
-  localsSupply <- Ref.new (-1)
+  localsSupply <- Ref.new (Array.length params - 1)
   in { params, locals, localsSupply, instrs }
 
 nextLocalIdx :: forall name. BodyBuilder name LocalIdx
@@ -265,7 +270,7 @@ bodyBuild ::
   Show name =>
   Array name ->
   BodyBuilder name a ->
-  Either (BuildError name) { locals :: Array ValType, body :: Expr }
+  { locals :: Array ValType, body :: Expr }
 bodyBuild params (BodyBuilder b) = unsafePerformEffect do
   env <- initialBodyEnv params
   _ <- runReaderT b env
@@ -275,12 +280,12 @@ buildBody ::
   forall name.
   Show name =>
   BodyEnv name ->
-  Effect (Either (BuildError name) { locals :: Array ValType, body :: Expr })
+  Effect { locals :: Array ValType, body :: Expr }
 buildBody { locals, instrs } = do
   ls <- map Map.toUnfoldable (Ref.read locals)
   let sortedLocals = Array.sortWith (_.index <<< Tuple.snd) ls
   instrs' <- Ref.read instrs
-  pure (Right { locals: map (_.type <<< Tuple.snd) sortedLocals, body: Array.concat instrs' })
+  pure { locals: map (_.type <<< Tuple.snd) sortedLocals, body: Array.concat instrs' }
 
 newLocal ::
   forall name.
