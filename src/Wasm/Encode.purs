@@ -14,31 +14,38 @@ import DynamicBuffer as DBuffer
 import Effect (Effect)
 import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
+import Wasm.Syntax (DataMode(..))
 import Wasm.Syntax as S
 
 unsigned_leb128 :: DBuffer -> Int -> Effect Unit
 unsigned_leb128 b x =
-  if x < 0
-  then unsafeCrashWith "Negative unsigned_leb128"
+  if x < 0 then unsafeCrashWith "Negative unsigned_leb128"
   else
-    let seven_bits = x `Bits.and` 0x7F in
-    let shifted = x `Bits.shr` 7 in
-    if shifted == 0
-    then DBuffer.addByte b seven_bits
-    else do
-      DBuffer.addByte b (seven_bits `Bits.or` 0x80)
-      unsigned_leb128 b shifted
+    let
+      seven_bits = x `Bits.and` 0x7F
+    in
+      let
+        shifted = x `Bits.shr` 7
+      in
+        if shifted == 0 then DBuffer.addByte b seven_bits
+        else do
+          DBuffer.addByte b (seven_bits `Bits.or` 0x80)
+          unsigned_leb128 b shifted
 
 signed_leb128 :: DBuffer -> Int -> Effect Unit
 signed_leb128 b x =
-  let seven_bits = x `Bits.and` 0x7F in
-  let shifted = x `Bits.shr` 7 in
-  if (shifted == 0 && seven_bits `Bits.and` 0x40 == 0)
-     || (shifted == -1 && seven_bits `Bits.and` 0x40 /= 0)
-  then DBuffer.addByte b seven_bits
-  else do
-    DBuffer.addByte b (seven_bits `Bits.or` 0x80)
-    signed_leb128 b shifted
+  let
+    seven_bits = x `Bits.and` 0x7F
+  in
+    let
+      shifted = x `Bits.shr` 7
+    in
+      if
+        (shifted == 0 && seven_bits `Bits.and` 0x40 == 0)
+          || (shifted == -1 && seven_bits `Bits.and` 0x40 /= 0) then DBuffer.addByte b seven_bits
+      else do
+        DBuffer.addByte b (seven_bits `Bits.or` 0x80)
+        signed_leb128 b shifted
 
 write_header :: DBuffer -> Effect Unit
 write_header b = do
@@ -68,7 +75,7 @@ write_reserved_size b offset s = do
   let chunk3 = ((Bits.shr s 14) `Bits.and` 0x7f) `Bits.or` 0x80
   let chunk4 = ((Bits.shr s 21) `Bits.and` 0x7f) `Bits.or` 0x80
   let chunk5 = (Bits.shr s 28) `Bits.and` 0x7f
-  DBuffer.setByte b offset       chunk1
+  DBuffer.setByte b offset chunk1
   DBuffer.setByte b (offset + 1) chunk2
   DBuffer.setByte b (offset + 2) chunk3
   DBuffer.setByte b (offset + 3) chunk4
@@ -94,12 +101,17 @@ write_vec b elements = do
 
 type SectionId = Int
 
-write_value_type :: DBuffer -> S.ValType -> Effect Unit
-write_value_type b ty = DBuffer.addByte b case ty of
+write_num_type :: DBuffer -> S.NumType -> Effect Unit
+write_num_type b ty = DBuffer.addByte b case ty of
   S.I32 -> 0x7F
   S.I64 -> 0x7E
   S.F32 -> 0x7D
   S.F64 -> 0x7C
+
+write_value_type :: DBuffer -> S.ValType -> Effect Unit
+write_value_type b = case _ of
+  S.NumType ty -> write_num_type b ty
+  S.RefType ty -> write_ref_type b ty
 
 write_result_type :: DBuffer -> S.ResultType -> Effect Unit
 write_result_type b ty = write_vec b (map (write_value_type b) ty)
@@ -120,8 +132,8 @@ write_function_section b funcs = write_section b 3 do
 
 write_memarg :: DBuffer -> S.MemArg -> Effect Unit
 write_memarg b { align, offset } = do
-  unsigned_leb128 b align
-  unsigned_leb128 b offset
+  write_u32 b align
+  write_u32 b offset
 
 write_block_type :: DBuffer -> S.BlockType -> Effect Unit
 write_block_type b = case _ of
@@ -207,19 +219,19 @@ write_instr b = case _ of
     DBuffer.addByte b 0x1B
   S.LocalGet idx -> do
     DBuffer.addByte b 0x20
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.LocalSet idx -> do
     DBuffer.addByte b 0x21
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.LocalTee idx -> do
     DBuffer.addByte b 0x22
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.GlobalGet idx -> do
     DBuffer.addByte b 0x23
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.GlobalSet idx -> do
     DBuffer.addByte b 0x24
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.I32Load memarg -> do
     DBuffer.addByte b 0x28
     write_memarg b memarg
@@ -292,22 +304,22 @@ write_instr b = case _ of
     DBuffer.addByte b 0x0B
   S.Br labelidx -> do
     DBuffer.addByte b 0x0C
-    unsigned_leb128 b labelidx
+    write_u32 b labelidx
   S.Br_if labelidx -> do
     DBuffer.addByte b 0x0D
-    unsigned_leb128 b labelidx
+    write_u32 b labelidx
   S.Br_table labelindxs labelidx -> do
     DBuffer.addByte b 0x0E
-    write_vec b (map (unsigned_leb128 b) labelindxs)
-    unsigned_leb128 b labelidx
+    write_vec b (map (write_u32 b) labelindxs)
+    write_u32 b labelidx
   S.Return ->
     DBuffer.addByte b 0x0F
   S.Call idx -> do
     DBuffer.addByte b 0x10
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.Call_Indirect type_idx -> do
     DBuffer.addByte b 0x11
-    unsigned_leb128 b type_idx
+    write_u32 b type_idx
     DBuffer.addByte b 0x00
 
 write_expr :: DBuffer -> S.Expr -> Effect Unit
@@ -320,23 +332,24 @@ write_section b id f = do
   DBuffer.addByte b id
   withSize b f
 
-write_elem_type :: DBuffer -> S.ElemType -> Effect Unit
-write_elem_type b = case _ of
-  S.FuncRef -> DBuffer.addByte b 0x70
-
 write_limits :: DBuffer -> S.Limits -> Effect Unit
 write_limits b { min, max } = case max of
   Nothing -> do
     DBuffer.addByte b 0x00
-    unsigned_leb128 b min
+    write_u32 b min
   Just max' -> do
     DBuffer.addByte b 0x01
-    unsigned_leb128 b min
-    unsigned_leb128 b max'
+    write_u32 b min
+    write_u32 b max'
+
+write_ref_type :: DBuffer -> S.RefType -> Effect Unit
+write_ref_type b = case _ of
+  S.FuncRef -> DBuffer.addByte b 0x70
+  S.ExternRef -> DBuffer.addByte b 0x6F
 
 write_table_type :: DBuffer -> S.TableType -> Effect Unit
 write_table_type b { limits, elemtype } = do
-  write_elem_type b elemtype
+  write_ref_type b elemtype
   write_limits b limits
 
 write_mutability :: DBuffer -> S.Mutability -> Effect Unit
@@ -353,7 +366,7 @@ write_import_desc :: DBuffer -> S.ImportDesc -> Effect Unit
 write_import_desc b = case _ of
   S.ImportFunc ix -> do
     DBuffer.addByte b 0x00
-    unsigned_leb128 b ix
+    write_u32 b ix
   S.ImportTable table_type -> do
     DBuffer.addByte b 0x01
     write_table_type b table_type
@@ -368,7 +381,7 @@ write_name :: DBuffer -> S.Name -> Effect Unit
 write_name b name = do
   buf <- DBuffer.fromUtf8 name
   len <- DBuffer.size buf
-  unsigned_leb128 b len
+  write_u32 b len
   DBuffer.addBuffer b buf
 
 write_import :: DBuffer -> S.Import -> Effect Unit
@@ -408,16 +421,16 @@ write_export_desc :: DBuffer -> S.ExportDesc -> Effect Unit
 write_export_desc b = case _ of
   S.ExportFunc idx -> do
     DBuffer.addByte b 0x00
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.ExportTable idx -> do
     DBuffer.addByte b 0x01
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.ExportMemory idx -> do
     DBuffer.addByte b 0x02
-    unsigned_leb128 b idx
+    write_u32 b idx
   S.ExportGlobal idx -> do
     DBuffer.addByte b 0x03
-    unsigned_leb128 b idx
+    write_u32 b idx
 
 write_export :: DBuffer -> S.Export -> Effect Unit
 write_export b { name, desc } = do
@@ -429,24 +442,27 @@ write_export_section b exports = write_section b 7 do
   write_vec b (map (write_export b) exports)
 
 write_start_section :: DBuffer -> S.FuncIdx -> Effect Unit
-write_start_section b idx = write_section b 8 (unsigned_leb128 b idx)
+write_start_section b idx = write_section b 8 (write_u32 b idx)
 
 write_elem :: DBuffer -> S.Elem -> Effect Unit
 write_elem b { table, offset, init } = do
-  unsigned_leb128 b table
+  write_u32 b table
   write_expr b offset
-  write_vec b (map (unsigned_leb128 b) init)
+  write_vec b (map (write_u32 b) init)
 
 write_elem_section :: DBuffer -> Array S.Elem -> Effect Unit
 write_elem_section b elems = write_section b 9 do
   write_vec b (map (write_elem b) elems)
 
 write_locals :: DBuffer -> Array S.ValType -> Array (Effect Unit)
-write_locals b locals =
-  let grouped = Array.groupAll locals in
-  map (\tys -> do
-    unsigned_leb128 b (NEA.length tys)
-    write_value_type b (NEA.head tys)) grouped
+write_locals b locals = do
+  let grouped = Array.groupAll locals
+  map
+    ( \tys -> do
+        write_u32 b (NEA.length tys)
+        write_value_type b (NEA.head tys)
+    )
+    grouped
 
 write_code :: DBuffer -> S.Func -> Effect Unit
 write_code b func = withSize b do
@@ -458,10 +474,20 @@ write_code_section b funcs = write_section b 10 do
   write_vec b (map (write_code b) funcs)
 
 write_data :: DBuffer -> S.Data -> Effect Unit
-write_data b dat = do
-  unsigned_leb128 b dat.data
-  write_expr b dat.offset
-  write_vec b (map (DBuffer.addByte b) dat.init)
+write_data b dat = case dat.mode of
+  Passive -> do
+    DBuffer.addByte b 0x01
+    write_vec b (map (DBuffer.addByte b) dat.init)
+  Active { memory, offset }
+    | memory == 0 -> do
+        DBuffer.addByte b 0x00
+        write_expr b offset
+        write_vec b (map (DBuffer.addByte b) dat.init)
+    | otherwise -> do
+        DBuffer.addByte b 0x02
+        write_u32 b memory
+        write_expr b offset
+        write_vec b (map (DBuffer.addByte b) dat.init)
 
 write_data_section :: DBuffer -> Array S.Data -> Effect Unit
 write_data_section b datas = write_section b 11 do

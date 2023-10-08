@@ -7,16 +7,34 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 
-data ValType = I32 | I64 | F32 | F64
-derive instance eqValType :: Eq ValType
-derive instance ordValType :: Ord ValType
+data RefType = FuncRef | ExternRef
 
-instance showValType :: Show ValType where
+derive instance eqRefType :: Eq RefType
+derive instance ordRefType :: Ord RefType
+instance showRefType :: Show RefType where
+  show = case _ of
+    FuncRef -> "funcref"
+    ExternRef -> "externref"
+
+data NumType = I32 | I64 | F32 | F64
+
+derive instance eqNumType :: Eq NumType
+derive instance ordNumType :: Ord NumType
+instance showNumType :: Show NumType where
   show = case _ of
     I32 -> "i32"
     I64 -> "i64"
     F32 -> "f64"
     F64 -> "f64"
+
+data ValType = NumType NumType | RefType RefType
+
+derive instance eqValType :: Eq ValType
+derive instance ordValType :: Ord ValType
+instance showValType :: Show ValType where
+  show = case _ of
+    NumType n -> show n
+    RefType r -> show r
 
 type ResultType = Array ValType
 
@@ -116,7 +134,7 @@ data Instruction
 
 instance showInstruction :: Show Instruction where
   show = case _ of
-    I32Const x ->"i32.const " <> show x
+    I32Const x -> "i32.const " <> show x
     I32Clz -> "i32.clz"
     I32Ctz -> "i32.ctz"
     I32Popcnt -> "i32.popcnt"
@@ -195,15 +213,11 @@ type Func =
   , body :: Expr
   }
 
-type Limits = { min :: Int, max :: Maybe Int}
-data ElemType = FuncRef
-
-instance showElemType :: Show ElemType where
-  show FuncRef = "funcref"
+type Limits = { min :: Int, max :: Maybe Int }
 
 type TableType =
   { limits :: Limits
-  , elemtype :: ElemType
+  , elemtype :: RefType
   }
 
 type Table =
@@ -217,6 +231,7 @@ type Memory =
   }
 
 data Mutability = Const | Var
+
 instance showMutability :: Show Mutability where
   show = case _ of
     Const -> "const"
@@ -240,10 +255,13 @@ type Elem =
 
 type Byte = Int
 type Data =
-  { data :: MemoryIdx
-  , offset :: Expr
+  { mode :: DataMode
   , init :: Array Byte
   }
+
+data DataMode
+  = Passive
+  | Active { offset :: Expr, memory :: MemoryIdx }
 
 type Name = String
 
@@ -299,14 +317,14 @@ type Module =
 
 emptyModule :: Module
 emptyModule =
-  { types    : []
-  , funcs    : []
-  , tables   : []
-  , memories : []
-  , globals  : []
-  , elem     : []
-  , data     : []
-  , start    : Nothing
-  , imports  : []
-  , exports  : []
+  { types: []
+  , funcs: []
+  , tables: []
+  , memories: []
+  , globals: []
+  , elem: []
+  , data: []
+  , start: Nothing
+  , imports: []
+  , exports: []
   }
