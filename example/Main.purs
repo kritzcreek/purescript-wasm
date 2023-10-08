@@ -17,10 +17,10 @@ import Wasm.Encode as Encode
 
 foreign import writeToFileImpl ::
   EffectFn3
-  String
-  Uint8Array
-  (EffectFn1 (Nullable Error) Unit)
-  Unit
+    String
+    Uint8Array
+    (EffectFn1 (Nullable Error) Unit)
+    Unit
 
 writeToFile :: String -> Uint8Array -> (Maybe Error -> Effect Unit) -> Effect Unit
 writeToFile path bytes cb =
@@ -29,7 +29,8 @@ writeToFile path bytes cb =
 foreign import runWasm :: String -> Effect Unit
 
 input :: String
-input = """
+input =
+  """
 fn add(x, y) {
   x + y
 }
@@ -54,7 +55,7 @@ main = do
     Right funcs -> do
       let bytes = Encode.encodeModule (Compiler.compileFuncs funcs)
       writeToFile "bytes.wasm" bytes case _ of
-          Nothing ->
-            runWasm "bytes.wasm"
-          Just err ->
-            Console.log ("Failed to write the wasm module" <> show err)
+        Nothing ->
+          runWasm "bytes.wasm"
+        Just err ->
+          Console.log ("Failed to write the wasm module" <> show err)

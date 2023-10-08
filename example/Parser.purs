@@ -19,13 +19,13 @@ type Parser = P.Parser String
 l :: T.GenTokenParser String Identity
 l = T.makeTokenParser langStyle
   where
-    javaDef = T.unGenLanguageDef javaStyle
-    langStyle = T.LanguageDef langDef
-    langDef =
-      javaDef
-        { reservedNames = [ "fn", "true", "false", "if", "else", "let" ]
-        , reservedOpNames = [ "+", "-", "*", "/", "<", ">", "<=", ">=", "==" ]
-        }
+  javaDef = T.unGenLanguageDef javaStyle
+  langStyle = T.LanguageDef langDef
+  langDef =
+    javaDef
+      { reservedNames = [ "fn", "true", "false", "if", "else", "let" ]
+      , reservedOpNames = [ "+", "-", "*", "/", "<", ">", "<=", ">=", "==" ]
+      }
 
 expr :: Parser (Expr String)
 expr = fix \e ->
@@ -43,15 +43,17 @@ expr = fix \e ->
       , Infix (l.reservedOp ">=" $> BinOp Gte) AssocRight
       , Infix (l.reservedOp "==" $> BinOp Eq) AssocRight
       ]
-    ] (atom e)
+    ]
+    (atom e)
 
 atom :: Parser (Expr String) -> Parser (Expr String)
 atom e =
-  map IntLit l.integer <|>
-  l.reserved "true" $> BoolLit true <|>
-  l.reserved "false" $> BoolLit true <|>
-  If <$> (l.reserved "if" *> e) <*> l.braces e <*> (l.reserved "else" *> l.braces e) <|>
-  (l.identifier >>= \ident -> call e ident <|> pure (Var ident))
+  map IntLit l.integer
+    <|> l.reserved "true" $> BoolLit true
+    <|> l.reserved "false" $> BoolLit true
+    <|> If <$> (l.reserved "if" *> e) <*> l.braces e <*> (l.reserved "else" *> l.braces e)
+    <|>
+      (l.identifier >>= \ident -> call e ident <|> pure (Var ident))
 
 call :: Parser (Expr String) -> String -> Parser (Expr String)
 call e name =
@@ -63,7 +65,7 @@ parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 decl :: Parser (Decl String)
 decl =
   LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr <|>
-  ExprD <$> expr
+    ExprD <$> expr
 
 func :: Parser (Func String)
 func = ado

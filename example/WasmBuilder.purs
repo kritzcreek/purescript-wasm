@@ -43,7 +43,6 @@ import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Globa
 -- - Declare tables and their elem sections
 -- - Declare data sections? (Maybe together with the memory declaration)
 
-
 type FuncData =
   { index :: FuncIdx
   , type :: TypeIdx
@@ -104,14 +103,14 @@ nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
   mkBuilder \{ globalsSupply } -> Ref.modify (_ + 1) globalsSupply
 
-declareGlobal ::
-  forall name.
-  Show name =>
-  Ord name =>
-  name ->
-  GlobalType ->
-  Expr ->
-  Builder name GlobalIdx
+declareGlobal
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> GlobalType
+  -> Expr
+  -> Builder name GlobalIdx
 declareGlobal name ty init = do
   index <- nextGlobalIdx
   mkBuilder \{ globals } -> do
@@ -125,13 +124,13 @@ nextFuncIdx :: forall name. Builder name FuncIdx
 nextFuncIdx =
   mkBuilder \{ funcsSupply } -> Ref.modify (_ + 1) funcsSupply
 
-declareFunc ::
-  forall name.
-  Show name =>
-  Ord name =>
-  name ->
-  FuncType ->
-  Builder name (Array ValType -> Expr -> Builder name Unit)
+declareFunc
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> FuncType
+  -> Builder name (Array ValType -> Expr -> Builder name Unit)
 declareFunc name ty = do
   tyIndex <- declareType ty
   index <- nextFuncIdx
@@ -173,38 +172,38 @@ instance showBuildError :: Show name => Show (BuildError name) where
   show = case _ of
     MissingBody name -> "Missing body for: " <> show name
 
-buildFuncs ::
-  forall name.
-  Show name =>
-  Env name ->
-  Effect (Either (BuildError name) (Array Func))
+buildFuncs
+  :: forall name
+   . Show name
+  => Env name
+  -> Effect (Either (BuildError name) (Array Func))
 buildFuncs { funcs } = do
   fs <- map Map.toUnfoldable (Ref.read funcs)
   let sortedFuncs = Array.sortWith (_.index <<< Tuple.snd) fs
   pure (traverse toWasmFunc sortedFuncs)
   where
-    toWasmFunc :: Tuple name FuncData -> Either (BuildError name) Func
-    toWasmFunc (Tuple name { type: ty, locals, body }) = case body, locals of
-      Just b, Just l ->
-        Right { type: ty, locals: l, body: b }
-      _, _ ->
-        Left (MissingBody name)
+  toWasmFunc :: Tuple name FuncData -> Either (BuildError name) Func
+  toWasmFunc (Tuple name { type: ty, locals, body }) = case body, locals of
+    Just b, Just l ->
+      Right { type: ty, locals: l, body: b }
+    _, _ ->
+      Left (MissingBody name)
 
-buildGlobals ::
-  forall name.
-  Show name =>
-  Env name ->
-  Effect (Array Global)
+buildGlobals
+  :: forall name
+   . Show name
+  => Env name
+  -> Effect (Array Global)
 buildGlobals { globals } = do
   gs <- map Map.toUnfoldable (Ref.read globals)
   let sortedGlobals = Array.sortWith (_.index <<< Tuple.snd) gs
   pure (map (Record.delete (SProxy :: _ "index") <<< Tuple.snd) sortedGlobals)
 
-buildModule ::
-  forall name.
-  Show name =>
-  Env name ->
-  Effect (Either (BuildError name) Module)
+buildModule
+  :: forall name
+   . Show name
+  => Env name
+  -> Effect (Either (BuildError name) Module)
 buildModule env@{ types, memory, exports } = do
   ts <- Ref.read types
   wasmGlobals <- buildGlobals env
@@ -215,13 +214,14 @@ buildModule env@{ types, memory, exports } = do
       Left err
     Right wasmFuncs ->
       Right
-        (emptyModule
-         { funcs = wasmFuncs
-         , globals = wasmGlobals
-         , types = ts
-         , memories = Array.fromFoldable mem
-         , exports = exps
-         })
+        ( emptyModule
+            { funcs = wasmFuncs
+            , globals = wasmGlobals
+            , types = ts
+            , memories = Array.fromFoldable mem
+            , exports = exps
+            }
+        )
 
 build :: forall name a. Show name => Builder name a -> Either (BuildError name) Module
 build (Builder b) = unsafePerformEffect do
@@ -265,43 +265,43 @@ nextLocalIdx =
 mkBodyBuilder :: forall name a. (BodyEnv name -> Effect a) -> BodyBuilder name a
 mkBodyBuilder act = BodyBuilder (ReaderT act)
 
-bodyBuild ::
-  forall name a.
-  Show name =>
-  Array name ->
-  BodyBuilder name a ->
-  { locals :: Array ValType, body :: Expr }
+bodyBuild
+  :: forall name a
+   . Show name
+  => Array name
+  -> BodyBuilder name a
+  -> { locals :: Array ValType, body :: Expr }
 bodyBuild params (BodyBuilder b) = unsafePerformEffect do
   env <- initialBodyEnv params
   _ <- runReaderT b env
   buildBody env
 
-buildBody ::
-  forall name.
-  Show name =>
-  BodyEnv name ->
-  Effect { locals :: Array ValType, body :: Expr }
+buildBody
+  :: forall name
+   . Show name
+  => BodyEnv name
+  -> Effect { locals :: Array ValType, body :: Expr }
 buildBody { locals, instrs } = do
   ls <- map Map.toUnfoldable (Ref.read locals)
   let sortedLocals = Array.sortWith (_.index <<< Tuple.snd) ls
   instrs' <- Ref.read instrs
   pure { locals: map (_.type <<< Tuple.snd) sortedLocals, body: Array.concat instrs' }
 
-newLocal ::
-  forall name.
-  Ord name =>
-  name ->
-  ValType ->
-  BodyBuilder name { set :: Instruction, get :: Instruction }
+newLocal
+  :: forall name
+   . Ord name
+  => name
+  -> ValType
+  -> BodyBuilder name { set :: Instruction, get :: Instruction }
 newLocal name ty = do
   index <- nextLocalIdx
   mkBodyBuilder \{ locals } -> do
     Ref.modify_ (Map.insert name { type: ty, index }) locals
     pure { set: LocalSet index, get: LocalGet index }
 
-addInstructions ::
-  forall name.
-  Array Instruction ->
-  BodyBuilder name Unit
+addInstructions
+  :: forall name
+   . Array Instruction
+  -> BodyBuilder name Unit
 addInstructions new = mkBodyBuilder \{ instrs } ->
   Ref.modify_ (flip Array.snoc new) instrs

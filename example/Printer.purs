@@ -46,10 +46,11 @@ renderExpr = case _ of
   BinOp op l r ->
     renderExpr l <+> renderOp op <+> renderExpr r
   If cond t e ->
-    text "if" <+> renderExpr cond <+>
-    curlies (renderExpr t) <+>
-    text "else" <+>
-    curlies (renderExpr e)
+    text "if" <+> renderExpr cond
+      <+> curlies (renderExpr t)
+      <+> text "else"
+      <+>
+        curlies (renderExpr e)
   Call func args ->
     text func <> parens (commaSep (map renderExpr args))
 
@@ -62,10 +63,16 @@ renderDecl = case _ of
 
 renderFunc :: forall a. Func String -> Doc a
 renderFunc (Func name params body) =
-  let headerD = text "fn" <+> text name in
-  let paramD = parens (commaSep (map text params)) in
-  let bodyD = D.foldWithSeparator (text ";" <> break) (map renderDecl body) in
-  headerD <> paramD <+> curlies bodyD
+  let
+    headerD = text "fn" <+> text name
+  in
+    let
+      paramD = parens (commaSep (map text params))
+    in
+      let
+        bodyD = D.foldWithSeparator (text ";" <> break) (map renderDecl body)
+      in
+        headerD <> paramD <+> curlies bodyD
 
 curlies :: forall a. Doc a -> Doc a
 curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
