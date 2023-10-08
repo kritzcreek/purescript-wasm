@@ -32,6 +32,7 @@ type LabelIdx = Int
 type FuncIdx = Int
 type MemoryIdx = Int
 type TableIdx = Int
+type DataIdx = Int
 
 type Expr = Array Instruction
 
@@ -95,6 +96,10 @@ data Instruction
   | I32Store16 MemArg
   | MemorySize
   | MemoryGrow
+  | MemoryFill
+  | MemoryCopy
+  | MemoryInit DataIdx
+  | DataDrop DataIdx
 
   -- Control Instructions
   | Nop
@@ -161,6 +166,10 @@ instance showInstruction :: Show Instruction where
     I32Store16 x -> "i32.store16 " <> show x
     MemorySize -> "memory.size"
     MemoryGrow -> "memory.grow"
+    MemoryFill -> "memory.fill"
+    MemoryCopy -> "memory.copy"
+    MemoryInit x -> "memory.init " <> show x
+    DataDrop x -> "data.drop " <> show x
     Nop -> "nop"
     Unreachable -> "unreachable"
     Block x y -> "block " <> show x <> " " <> show y

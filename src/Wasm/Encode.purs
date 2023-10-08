@@ -250,6 +250,24 @@ write_instr b = case _ of
   S.MemoryGrow -> do
     DBuffer.addByte b 0x40
     DBuffer.addByte b 0x00
+  S.MemoryInit x -> do
+    DBuffer.addByte b 0xFC
+    unsigned_leb128 b 8
+    unsigned_leb128 b x
+    DBuffer.addByte b 0x00
+  S.DataDrop x -> do
+    DBuffer.addByte b 0xFC
+    unsigned_leb128 b 9
+    unsigned_leb128 b x
+  S.MemoryCopy -> do
+    DBuffer.addByte b 0xFC
+    unsigned_leb128 b 10
+    unsigned_leb128 b 0x00
+    unsigned_leb128 b 0x00
+  S.MemoryFill -> do
+    DBuffer.addByte b 0xFC
+    unsigned_leb128 b 11
+    unsigned_leb128 b 0x00
   S.Unreachable ->
     DBuffer.addByte b 0x00
   S.Nop ->
