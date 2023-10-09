@@ -1,0 +1,7 @@
+workspace:
+  package_set:
+    registry: 42.4.0
+  extra_packages:
+    dodo-printer:
+      git: https://github.com/kritzcreek/purescript-dodo-printer.git
+      ref: breaking-node-changes-new-spago

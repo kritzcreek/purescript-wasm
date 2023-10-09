@@ -1,18 +1,19 @@
 {
   "name": "purescript-wasm",
+  "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "spago -x example.dhall build",
-    "run": "spago -x example.dhall run",
+    "build": "spago build",
+    "start": "spago run -p example",
     "format": "purs-tidy format-in-place src example"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "purescript": "^0.14.4",
+    "purescript": "^0.15.10",
     "purs-tidy": "^0.5.4",
-    "spago": "^0.20.3"
+    "spago": "^0.93.17"
   }
 }

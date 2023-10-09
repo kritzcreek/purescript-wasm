@@ -1,10 +1,10 @@
-const fs = require('fs');
+import * as fs from 'node:fs'
 
-exports.writeToFileImpl = function(path, buf, cb) {
+export function writeToFileImpl(path, buf, cb) {
   fs.writeFile(path, buf, cb);
 };
 
-exports.runWasm = (file) => () => {
+export const runWasm = (file) => () => {
   fs.readFile(file, null, (err, buffer) => {
     WebAssembly.compile(buffer).then(module => {
       WebAssembly.instantiate(module, {}).then(inst => {

@@ -23,7 +23,6 @@ import Data.Either (Either(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Symbol (SProxy(..))
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple as Tuple
@@ -34,6 +33,7 @@ import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
+import Type.Proxy (Proxy(..))
 import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Instruction(..), LocalIdx, Memory, Module, Name, TypeIdx, ValType, emptyModule)
 
 -- - Define functions
@@ -197,7 +197,7 @@ buildGlobals
 buildGlobals { globals } = do
   gs <- map Map.toUnfoldable (Ref.read globals)
   let sortedGlobals = Array.sortWith (_.index <<< Tuple.snd) gs
-  pure (map (Record.delete (SProxy :: _ "index") <<< Tuple.snd) sortedGlobals)
+  pure (map (Record.delete (Proxy :: _ "index") <<< Tuple.snd) sortedGlobals)
 
 buildModule
   :: forall name

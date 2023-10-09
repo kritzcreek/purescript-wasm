@@ -8,11 +8,11 @@ import Control.Lazy (fix)
 import Data.Array as Array
 import Data.Either (Either)
 import Data.Identity (Identity)
-import Text.Parsing.Parser as P
-import Text.Parsing.Parser.Expr (Assoc(..), Operator(..), buildExprParser)
-import Text.Parsing.Parser.Language (javaStyle)
-import Text.Parsing.Parser.String as PS
-import Text.Parsing.Parser.Token as T
+import Parsing as P
+import Parsing.Expr (Assoc(..), Operator(..), buildExprParser)
+import Parsing.Language (javaStyle)
+import Parsing.String as PS
+import Parsing.Token as T
 
 type Parser = P.Parser String
 
