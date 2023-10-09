@@ -4,14 +4,13 @@ export function writeToFileImpl(path, buf, cb) {
   fs.writeFile(path, buf, cb);
 };
 
-export const runWasm = (file) => () => {
+export function runWasmImpl(file) {
   fs.readFile(file, null, (err, buffer) => {
     WebAssembly.compile(buffer).then(module => {
       WebAssembly.instantiate(module, {}).then(inst => {
-        console.log("Succesfully created a Wasm module.")
-        console.log(inst.exports)
+        console.log("Successfully created a Wasm module.")
         let res = inst.exports.main()
-        console.log("Result: ", res)
+        console.log("Result:", res)
       })
     });
   });

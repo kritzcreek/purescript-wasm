@@ -11,7 +11,7 @@ import Data.Nullable as Nullable
 import Effect (Effect)
 import Effect.Class.Console as Console
 import Effect.Exception (Error)
-import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn3)
+import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn1, runEffectFn3)
 import Parser as Parser
 import Wasm.Encode as Encode
 
@@ -26,7 +26,10 @@ writeToFile :: String -> Uint8Array -> (Maybe Error -> Effect Unit) -> Effect Un
 writeToFile path bytes cb =
   runEffectFn3 writeToFileImpl path bytes (mkEffectFn1 \err -> cb (Nullable.toMaybe err))
 
-foreign import runWasm :: String -> Effect Unit
+foreign import runWasmImpl :: EffectFn1 String Unit
+
+runWasm :: String -> Effect Unit
+runWasm = runEffectFn1 runWasmImpl
 
 input :: String
 input =
