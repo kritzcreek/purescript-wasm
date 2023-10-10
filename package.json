@@ -12,8 +12,8 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "purescript": "^0.15.10",
-    "purs-tidy": "^0.5.4",
+    "purescript": "^0.15.12",
+    "purs-tidy": "^0.10.0",
     "spago": "^0.93.17"
   }
 }

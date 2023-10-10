@@ -1,15 +1,19 @@
-module Compiler where
+module CompilerNew where
 
 import Prelude
 
-import AST as AST
+import AstNew as AST
 import Data.Array as Array
+import Data.Array.NonEmpty as NEA
 import Data.FoldableWithIndex (foldlWithIndex)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, traverse_)
+import Effect.Class (liftEffect)
+import Effect.Exception (throw)
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
+import PrinterNew as Printer
 import Wasm.Syntax as S
 import WasmBuilder as Builder
 
@@ -19,9 +23,34 @@ type Locals = Map String S.LocalIdx
 
 compileFuncs :: Array (AST.Func String) -> S.Module
 compileFuncs funcs = Builder.build' do
+  _rts <- declareRts
   fills <- traverse declareFunc funcs
   traverse_ implFunc fills
   Builder.declareExport "main" "main"
+
+type Rts = { alloc :: S.Instruction }
+
+declareRts :: Builder Rts
+declareRts = do
+  watermark <- Builder.declareGlobal
+    "watermark"
+    { mutability: S.Var, type: (S.NumType S.I32) }
+    [ S.I32Const 256 ]
+  allocFill <- Builder.declareFunc "alloc" { arguments: [ S.NumType S.I32 ], results: [ S.NumType S.I32 ] }
+  let
+    { locals, body } = Builder.bodyBuild [ "allocSize" ] do
+      allocSize <- Builder.getParam "allocSize"
+      Builder.addInstructions
+        [ S.GlobalGet watermark
+        , S.GlobalGet watermark
+        , allocSize.get
+        , S.I32Add
+        , S.GlobalSet watermark
+        ]
+  allocFill locals body
+  callAlloc <- Builder.callFunc "alloc"
+
+  pure { alloc: callAlloc }
 
 compileOp :: AST.Op -> S.Instruction
 compileOp = case _ of
@@ -39,24 +68,39 @@ lookupLocal :: String -> Locals -> S.LocalIdx
 lookupLocal x ls =
   unsafePartial fromJust (Map.lookup x ls)
 
-compileExpr :: Locals -> AST.Expr String -> Builder (Array S.Instruction)
-compileExpr locals = case _ of
+compileLit :: AST.Lit -> Builder (Array S.Instruction)
+compileLit = case _ of
   AST.IntLit x -> pure [ S.I32Const x ]
   AST.BoolLit b -> pure [ if b then S.I32Const 1 else S.I32Const 0 ]
-  AST.Var x -> pure [ S.LocalGet (lookupLocal x locals) ]
-  AST.BinOp op l r -> ado
+
+compileExpr :: Locals -> AST.Expr String -> Builder (Array S.Instruction)
+compileExpr locals = case _ of
+  AST.LitE lit -> compileLit lit
+  AST.VarE x -> pure [ S.LocalGet (lookupLocal x locals) ]
+  AST.BinOpE op l r -> ado
     l' <- compileExpr locals l
     r' <- compileExpr locals r
     in l' <> r' <> [ compileOp op ]
-  AST.If cond t e -> ado
+  AST.IfE cond t e -> ado
     cond' <- compileExpr locals cond
     t' <- compileExpr locals t
     e' <- compileExpr locals e
     in cond' <> [ S.If (S.BlockValType (Just (S.NumType S.I32))) t' e' ]
-  AST.Call func args -> ado
+  AST.CallE func arg -> do
+    { fn, args } <- case unfoldCall func [arg] of
+      Nothing -> liftEffect (throw ("Can't unfold " <> Printer.printExpr (AST.CallE func arg)))
+      Just r -> pure r
     args' <- traverse (compileExpr locals) args
-    call <- Builder.callFunc func
-    in Array.fold args' <> [ call ]
+    call <- Builder.callFunc fn
+    pure (Array.fold args' <> [ call ])
+  AST.BlockE _body -> ado
+    in []
+
+unfoldCall :: forall a. AST.Expr a -> Array (AST.Expr a) -> Maybe { fn :: a, args :: Array (AST.Expr a) }
+unfoldCall f args = case f of
+  AST.VarE fn -> Just { fn, args }
+  AST.CallE newF newArg -> unfoldCall newF ([newArg] <> args)
+  _ -> Nothing
 
 compileBody
   :: Locals
@@ -98,7 +142,7 @@ declareFunc
 declareFunc func@(AST.Func name params _) = do
   fill <- Builder.declareFunc
     name
-    { arguments: map (const (S.NumType S.I32)) params
+    { arguments: map (const (S.NumType S.I32)) (NEA.toArray params)
     , results: [ S.NumType S.I32 ]
     }
   pure { fill, func }
@@ -108,7 +152,10 @@ implFunc
      , func :: AST.Func String
      }
   -> Builder Unit
-implFunc { fill, func: AST.Func _ params body } = do
-  let params' = foldlWithIndex (\ix xs name -> Map.insert name ix xs) Map.empty params
-  { expr, locals } <- compileBody params' body
-  fill locals expr
+implFunc { fill, func: AST.Func _ params body } =
+  case body of
+    AST.BlockE decls -> do
+      let params' = foldlWithIndex (\ix xs name -> Map.insert name ix xs) Map.empty params
+      { expr, locals } <- compileBody params' decls
+      fill locals expr
+    e -> liftEffect (throw ("invalid function body: " <> Printer.printExpr e))

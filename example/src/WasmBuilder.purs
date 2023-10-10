@@ -1,17 +1,18 @@
 module WasmBuilder
-  ( Builder
+  ( BodyBuilder
   , BuildError(..)
+  , Builder
+  , bodyBuild
   , build
   , build'
-  , declareType
-  , declareGlobal
-  , declareFunc
-  , declareExport
   , callFunc
-
-  , BodyBuilder
-  , bodyBuild
+  , declareExport
+  , declareFunc
+  , declareGlobal
+  , declareType
   , newLocal
+  , getLocal
+  , getParam
   , addInstructions
   ) where
 
@@ -27,6 +28,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple as Tuple
 import Effect (Effect)
+import Effect.Class (class MonadEffect)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -80,11 +82,13 @@ initialEnv = ado
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
-derive newtype instance functorBuilder :: Functor (Builder name)
-derive newtype instance applyBuilder :: Apply (Builder name)
-derive newtype instance applicativeBuilder :: Applicative (Builder name)
-derive newtype instance bindBuilder :: Bind (Builder name)
-derive newtype instance monadBuilder :: Monad (Builder name)
+derive newtype instance Functor (Builder name)
+derive newtype instance Apply (Builder name)
+derive newtype instance Applicative (Builder name)
+derive newtype instance Bind (Builder name)
+derive newtype instance Monad (Builder name)
+derive newtype instance MonadEffect (Builder name)
+
 
 mkBuilder :: forall name a. (Env name -> Effect a) -> Builder name a
 mkBuilder act = Builder (ReaderT act)
@@ -165,8 +169,7 @@ declareExport name exportName = do
       (\es -> Array.snoc es { name: exportName, desc: ExportFunc index })
       exports
 
-data BuildError name
-  = MissingBody name
+data BuildError name = MissingBody name
 
 instance showBuildError :: Show name => Show (BuildError name) where
   show = case _ of
@@ -298,6 +301,29 @@ newLocal name ty = do
   mkBodyBuilder \{ locals } -> do
     Ref.modify_ (Map.insert name { type: ty, index }) locals
     pure { set: LocalSet index, get: LocalGet index }
+
+getParam
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> BodyBuilder name { set :: Instruction, get :: Instruction }
+getParam name = mkBodyBuilder \{ params } -> do
+  case Array.findIndex (_ == name) params of
+    Nothing -> throw ("Tried to read unknown local: " <> show name)
+    Just ix -> pure { set: LocalSet ix, get: LocalGet ix }
+
+getLocal
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> BodyBuilder name { set :: Instruction, get :: Instruction }
+getLocal name = mkBodyBuilder \{ locals } -> do
+  lcls <- Ref.read locals
+  case Map.lookup name lcls of
+    Nothing -> throw ("Tried to read unknown local: " <> show name)
+    Just ld -> pure { set: LocalSet ld.index, get: LocalGet ld.index }
 
 addInstructions
   :: forall name

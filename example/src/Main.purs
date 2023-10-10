@@ -3,6 +3,7 @@ module Main where
 import Prelude
 
 import Compiler as Compiler
+import CompilerNew as CompilerNew
 import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
@@ -13,14 +14,16 @@ import Effect.Class.Console as Console
 import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn1, runEffectFn3)
 import Parser as Parser
+import ParserNew as ParserNew
+import PrinterNew as PrinterNew
 import Wasm.Encode as Encode
 
-foreign import writeToFileImpl ::
-  EffectFn3
-    String
-    Uint8Array
-    (EffectFn1 (Nullable Error) Unit)
-    Unit
+foreign import writeToFileImpl
+  :: EffectFn3
+       String
+       Uint8Array
+       (EffectFn1 (Nullable Error) Unit)
+       Unit
 
 writeToFile :: String -> Uint8Array -> (Maybe Error -> Effect Unit) -> Effect Unit
 writeToFile path bytes cb =
@@ -34,31 +37,46 @@ runWasm = runEffectFn1 runWasmImpl
 input :: String
 input =
   """
-fn add(x, y) {
+add x y = {
   x + y
 }
 
-fn fib(x) {
+fib x = {
   if x < 3 {
     1
   } else {
-    add(fib(x - 1), fib(x - 2))
+    add (fib (x - 1)) (fib (x - 2))
   }
 }
 
-fn main() {
-  fib(10)
+main _ = {
+  let x = 10;
+  x + x
 }
 """
 
 main :: Effect Unit
 main = do
-  case Parser.parseFuncs input of
+  case ParserNew.parseFuncs input of
     Left err -> Console.logShow err
     Right funcs -> do
-      let bytes = Encode.encodeModule (Compiler.compileFuncs funcs)
+      Console.log (PrinterNew.printFuncs funcs)
+      let bytes = Encode.encodeModule (CompilerNew.compileFuncs funcs)
       writeToFile "bytes.wasm" bytes case _ of
         Nothing ->
           runWasm "bytes.wasm"
         Just err ->
           Console.log ("Failed to write the wasm module" <> show err)
+
+-- main :: Effect Unit
+-- main = do
+--   case Parser.parseFuncs input of
+--     Left err -> Console.logShow err
+--     Right funcs -> do
+--       let bytes = Encode.encodeModule (Compiler.compileFuncs funcs)
+--       writeToFile "bytes.wasm" bytes case _ of
+--         Nothing ->
+--           runWasm "bytes.wasm"
+--         Just err ->
+--           Console.log ("Failed to write the wasm module" <> show err)
+
