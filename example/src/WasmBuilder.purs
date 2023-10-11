@@ -1,18 +1,17 @@
 module WasmBuilder
-  ( Builder
+  ( BodyBuilder
   , BuildError(..)
+  , Builder
+  , bodyBuild
   , build
   , build'
-  , declareType
-  , declareGlobal
-  , declareFunc
-  , declareExport
   , callFunc
-
-  , BodyBuilder
-  , bodyBuild
+  , declareExport
+  , declareFunc
+  , declareGlobal
+  , declareType
   , newLocal
-  , addInstructions
+  , liftBuilder
   ) where
 
 import Prelude
@@ -27,6 +26,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple as Tuple
 import Effect (Effect)
+import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -80,11 +80,12 @@ initialEnv = ado
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
-derive newtype instance functorBuilder :: Functor (Builder name)
-derive newtype instance applyBuilder :: Apply (Builder name)
-derive newtype instance applicativeBuilder :: Applicative (Builder name)
-derive newtype instance bindBuilder :: Bind (Builder name)
-derive newtype instance monadBuilder :: Monad (Builder name)
+derive newtype instance Functor (Builder name)
+derive newtype instance Apply (Builder name)
+derive newtype instance Applicative (Builder name)
+derive newtype instance Bind (Builder name)
+derive newtype instance Monad (Builder name)
+derive newtype instance MonadEffect (Builder name) -- Remove as this is unsafe
 
 mkBuilder :: forall name a. (Env name -> Effect a) -> Builder name a
 mkBuilder act = Builder (ReaderT act)
@@ -165,8 +166,7 @@ declareExport name exportName = do
       (\es -> Array.snoc es { name: exportName, desc: ExportFunc index })
       exports
 
-data BuildError name
-  = MissingBody name
+data BuildError name = MissingBody name
 
 instance showBuildError :: Show name => Show (BuildError name) where
   show = case _ of
@@ -236,72 +236,53 @@ build' b = case build b of
 
 type LocalData = { index :: LocalIdx, type :: ValType }
 
-type BodyEnv name =
-  { params :: Array name
-  , locals :: Ref (Map name LocalData)
-  , localsSupply :: Ref Int
-  , instrs :: Ref (Array Expr)
+type BodyEnv =
+  { params :: Array ValType
+  , locals :: Ref (Array ValType)
   }
 
-newtype BodyBuilder name a = BodyBuilder (ReaderT (BodyEnv name) Effect a)
+newtype BodyBuilder name a = BodyBuilder (ReaderT BodyEnv (Builder name) a)
 
-derive newtype instance functorBodyBuilder :: Functor (BodyBuilder name)
-derive newtype instance applyBodyBuilder :: Apply (BodyBuilder name)
-derive newtype instance applicativeBodyBuilder :: Applicative (BodyBuilder name)
-derive newtype instance bindBodyBuilder :: Bind (BodyBuilder name)
-derive newtype instance monadBodyBuilder :: Monad (BodyBuilder name)
+derive newtype instance Functor (BodyBuilder name)
+derive newtype instance Apply (BodyBuilder name)
+derive newtype instance Applicative (BodyBuilder name)
+derive newtype instance Bind (BodyBuilder name)
+derive newtype instance Monad (BodyBuilder name)
 
-initialBodyEnv :: forall name. Array name -> Effect (BodyEnv name)
+initialBodyEnv :: Array ValType -> Effect BodyEnv
 initialBodyEnv params = ado
-  locals <- Ref.new Map.empty
-  instrs <- Ref.new []
-  localsSupply <- Ref.new (Array.length params - 1)
-  in { params, locals, localsSupply, instrs }
+  locals <- Ref.new []
+  in { params, locals }
 
 nextLocalIdx :: forall name. BodyBuilder name LocalIdx
 nextLocalIdx =
-  mkBodyBuilder \{ localsSupply } -> Ref.modify (_ + 1) localsSupply
+  mkBodyBuilder \{ params, locals } -> liftEffect ado
+    localCount <- map Array.length (Ref.read locals)
+    in localCount + Array.length params
 
-mkBodyBuilder :: forall name a. (BodyEnv name -> Effect a) -> BodyBuilder name a
+mkBodyBuilder :: forall name a. (BodyEnv -> Builder name a) -> BodyBuilder name a
 mkBodyBuilder act = BodyBuilder (ReaderT act)
 
 bodyBuild
   :: forall name a
-   . Show name
-  => Array name
+   . Array ValType
   -> BodyBuilder name a
-  -> { locals :: Array ValType, body :: Expr }
-bodyBuild params (BodyBuilder b) = unsafePerformEffect do
-  env <- initialBodyEnv params
-  _ <- runReaderT b env
-  buildBody env
-
-buildBody
-  :: forall name
-   . Show name
-  => BodyEnv name
-  -> Effect { locals :: Array ValType, body :: Expr }
-buildBody { locals, instrs } = do
-  ls <- map Map.toUnfoldable (Ref.read locals)
-  let sortedLocals = Array.sortWith (_.index <<< Tuple.snd) ls
-  instrs' <- Ref.read instrs
-  pure { locals: map (_.type <<< Tuple.snd) sortedLocals, body: Array.concat instrs' }
+  -> Builder name { result :: a, locals :: Array ValType }
+bodyBuild params (BodyBuilder b) = do
+  env <- liftEffect (initialBodyEnv params)
+  result <- runReaderT b env
+  locals <- liftEffect (Ref.read env.locals)
+  pure { result, locals }
 
 newLocal
   :: forall name
-   . Ord name
-  => name
-  -> ValType
-  -> BodyBuilder name { set :: Instruction, get :: Instruction }
-newLocal name ty = do
+   . ValType
+  -> BodyBuilder name LocalIdx
+newLocal ty = do
   index <- nextLocalIdx
-  mkBodyBuilder \{ locals } -> do
-    Ref.modify_ (Map.insert name { type: ty, index }) locals
-    pure { set: LocalSet index, get: LocalGet index }
+  mkBodyBuilder \{ locals } -> liftEffect do
+    Ref.modify_ (\l -> Array.snoc l ty) locals
+    pure index
 
-addInstructions
-  :: forall name
-   . Array Instruction
-  -> BodyBuilder name Unit
-addInstructions new = mkBodyBuilder \{ instrs } ->
-  Ref.modify_ (flip Array.snoc new) instrs
+liftBuilder :: forall name a. Builder name a -> BodyBuilder name a
+liftBuilder b = mkBodyBuilder (\_ -> b)

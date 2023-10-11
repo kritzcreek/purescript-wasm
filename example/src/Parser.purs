@@ -1,14 +1,22 @@
-module Parser (parseFuncs, parseExpr) where
+module Parser
+  ( parseExpr
+  , parseFuncs
+  ) where
 
 import Prelude
 
-import AST (Decl(..), Expr(..), Func(..), Op(..))
+import Ast (Decl(..), Expr(..), Func(..), Lit(..), Op(..))
 import Control.Alt ((<|>))
 import Control.Lazy (fix)
 import Data.Array as Array
+import Data.Array.NonEmpty as NEA
 import Data.Either (Either)
 import Data.Identity (Identity)
+import Data.Int as Int
+import Data.Maybe (Maybe(..))
+import Data.String.CodeUnits as CU
 import Parsing as P
+import Parsing.Combinators.Array (many1)
 import Parsing.Expr (Assoc(..), Operator(..), buildExprParser)
 import Parsing.Language (javaStyle)
 import Parsing.String as PS
@@ -30,49 +38,69 @@ l = T.makeTokenParser langStyle
 expr :: Parser (Expr String)
 expr = fix \e ->
   buildExprParser
-    [ [ Infix (l.reservedOp "/" $> BinOp Div) AssocRight
-      , Infix (l.reservedOp "*" $> BinOp Mul) AssocRight
+    [ [ Infix (l.reservedOp "/" $> BinOpE Div) AssocRight
+      , Infix (l.reservedOp "*" $> BinOpE Mul) AssocRight
       ]
-    , [ Infix (l.reservedOp "-" $> BinOp Sub) AssocRight
-      , Infix (l.reservedOp "+" $> BinOp Add) AssocRight
+    , [ Infix (l.reservedOp "-" $> BinOpE Sub) AssocRight
+      , Infix (l.reservedOp "+" $> BinOpE Add) AssocRight
       ]
-    , [ Infix (l.reservedOp "<" $> BinOp Lt) AssocRight
-      , Infix (l.reservedOp ">" $> BinOp Gt) AssocRight
+    , [ Infix (l.reservedOp "<" $> BinOpE Lt) AssocRight
+      , Infix (l.reservedOp ">" $> BinOpE Gt) AssocRight
       ]
-    , [ Infix (l.reservedOp "<=" $> BinOp Lte) AssocRight
-      , Infix (l.reservedOp ">=" $> BinOp Gte) AssocRight
-      , Infix (l.reservedOp "==" $> BinOp Eq) AssocRight
+    , [ Infix (l.reservedOp "<=" $> BinOpE Lte) AssocRight
+      , Infix (l.reservedOp ">=" $> BinOpE Gte) AssocRight
+      , Infix (l.reservedOp "==" $> BinOpE Eq) AssocRight
       ]
     ]
-    (atom e)
+    (expr1 e)
+
+intLit :: Parser Int
+intLit = do
+  digits <- many1 T.digit
+  l.whiteSpace
+  let (s :: String) = CU.fromCharArray (NEA.toArray digits)
+  case Int.fromString s of
+    Nothing -> P.fail "Failed to parse number"
+    Just n -> pure n
+
+expr1 :: Parser (Expr String) -> Parser (Expr String)
+expr1 e = block e <|> expr2 e
+
+expr2 :: Parser (Expr String) -> Parser (Expr String)
+expr2 e = do
+  atoms <- many1 (atom e)
+  pure (Array.foldl CallE (NEA.head atoms) (NEA.tail atoms))
 
 atom :: Parser (Expr String) -> Parser (Expr String)
 atom e =
-  map IntLit l.integer
-    <|> l.reserved "true" $> BoolLit true
-    <|> l.reserved "false" $> BoolLit true
-    <|> If <$> (l.reserved "if" *> e) <*> l.braces e <*> (l.reserved "else" *> l.braces e)
-    <|>
-      (l.identifier >>= \ident -> call e ident <|> pure (Var ident))
+  map LitE lit
+    <|> map VarE l.identifier
+    <|> IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e)
+    <|> l.parens e
 
-call :: Parser (Expr String) -> String -> Parser (Expr String)
-call e name =
-  Call name <$> l.parens (map Array.fromFoldable (l.commaSep e))
+block :: Parser (Expr String) -> Parser (Expr String)
+block e =
+  BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep (decl e))
+
+lit :: Parser Lit
+lit = map IntLit intLit
+  <|> l.reserved "true" $> BoolLit true
+  <|> l.reserved "false" $> BoolLit true
 
 parseExpr :: String -> Either P.ParseError (Expr String)
 parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 
-decl :: Parser (Decl String)
-decl =
-  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr <|>
-    ExprD <$> expr
+decl :: Parser (Expr String) -> Parser (Decl String)
+decl e =
+  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e <|>
+    ExprD <$> e
 
 func :: Parser (Func String)
 func = ado
-  l.reserved "fn"
   name <- l.identifier
-  params <- l.parens (Array.fromFoldable <$> (l.commaSep l.identifier))
-  body <- l.braces (Array.fromFoldable <$> (l.semiSep decl))
+  params <- many1 l.identifier
+  _ <- l.symbol "="
+  body <- expr
   in Func name params body
 
 parseFuncs :: String -> Either P.ParseError (Array (Func String))

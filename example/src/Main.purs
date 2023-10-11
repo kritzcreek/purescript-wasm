@@ -13,14 +13,15 @@ import Effect.Class.Console as Console
 import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn1, runEffectFn3)
 import Parser as Parser
+import Printer as Printer
 import Wasm.Encode as Encode
 
-foreign import writeToFileImpl ::
-  EffectFn3
-    String
-    Uint8Array
-    (EffectFn1 (Nullable Error) Unit)
-    Unit
+foreign import writeToFileImpl
+  :: EffectFn3
+       String
+       Uint8Array
+       (EffectFn1 (Nullable Error) Unit)
+       Unit
 
 writeToFile :: String -> Uint8Array -> (Maybe Error -> Effect Unit) -> Effect Unit
 writeToFile path bytes cb =
@@ -34,20 +35,20 @@ runWasm = runEffectFn1 runWasmImpl
 input :: String
 input =
   """
-fn add(x, y) {
-  x + y
+
+twice x = {
+  let y = x + x;
+  y
 }
 
-fn fib(x) {
-  if x < 3 {
-    1
-  } else {
-    add(fib(x - 1), fib(x - 2))
-  }
-}
-
-fn main() {
-  fib(10)
+main _ = {
+  let x = 10;
+  let y = {
+    let x = 20;
+    45;
+    twice x
+  };
+  y + x
 }
 """
 
@@ -56,6 +57,7 @@ main = do
   case Parser.parseFuncs input of
     Left err -> Console.logShow err
     Right funcs -> do
+      Console.log (Printer.printFuncs funcs)
       let bytes = Encode.encodeModule (Compiler.compileFuncs funcs)
       writeToFile "bytes.wasm" bytes case _ of
         Nothing ->
