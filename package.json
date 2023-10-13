@@ -7,11 +7,14 @@
   "scripts": {
     "build": "spago build",
     "start": "spago run -p example",
-    "format": "purs-tidy format-in-place src example"
+    "format": "purs-tidy format-in-place src example",
+    "pscid": "pscid -I \"lib;example\" --test",
+    "pscid:test": "npm start; exit 1"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "pscid": "^2.11.0",
     "purescript": "^0.15.12",
     "purs-tidy": "^0.10.0",
     "spago": "^0.93.17"
