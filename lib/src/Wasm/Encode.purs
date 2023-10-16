@@ -216,8 +216,12 @@ write_instr b = case _ of
     write_u32 b idx
   S.Drop ->
     DBuffer.addByte b 0x1A
-  S.Select ->
-    DBuffer.addByte b 0x1B
+  S.Select m_tys -> case m_tys of
+    Nothing ->
+      DBuffer.addByte b 0x1B
+    Just tys -> do
+      DBuffer.addByte b 0x1C
+      write_vec b (map (write_value_type b) tys)
   S.LocalGet idx -> do
     DBuffer.addByte b 0x20
     write_u32 b idx

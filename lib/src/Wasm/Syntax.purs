@@ -5,6 +5,7 @@ module Wasm.Syntax where
 
 import Prelude
 
+import Data.String as String
 import Data.Maybe (Maybe(..))
 
 data RefType = FuncRef | ExternRef
@@ -99,7 +100,7 @@ data Instruction
 
   -- Parametric Instructions
   | Drop
-  | Select
+  | Select (Maybe (Array ValType))
 
   -- Variable Instructions
   | LocalGet LocalIdx
@@ -176,7 +177,8 @@ instance showInstruction :: Show Instruction where
     RefIsNull -> "ref.is_null"
     RefFunc x -> "ref.func " <> show x
     Drop -> "drop"
-    Select -> "select"
+    Select Nothing -> "select"
+    Select (Just tys) -> "select " <> String.joinWith " " (map show tys)
     LocalGet x -> "local.get " <> show x
     LocalSet x -> "local.set " <> show x
     LocalTee x -> "local.tee " <> show x
