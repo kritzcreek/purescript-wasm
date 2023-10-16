@@ -92,6 +92,11 @@ data Instruction
   | I32Extend16_s
   | I32Wrap_i64
 
+  -- Reference instructions
+  | RefNull RefType
+  | RefIsNull
+  | RefFunc FuncIdx
+
   -- Parametric Instructions
   | Drop
   | Select
@@ -167,6 +172,9 @@ instance showInstruction :: Show Instruction where
     I32Extend8_s -> "i32.extend8_s"
     I32Extend16_s -> "i32.extend16_s"
     I32Wrap_i64 -> "i32.wrap_i64"
+    RefNull x -> "ref.null " <> show x
+    RefIsNull -> "ref.is_null"
+    RefFunc x -> "ref.func " <> show x
     Drop -> "drop"
     Select -> "select"
     LocalGet x -> "local.get " <> show x
@@ -248,10 +256,15 @@ type Global =
   }
 
 type Elem =
-  { table :: TableIdx
-  , offset :: Expr
-  , init :: Array FuncIdx
+  { type :: RefType
+  , init :: Array Expr
+  , mode :: ElemMode
   }
+
+data ElemMode
+  = ElemPassive
+  | ElemDeclarative
+  | ElemActive { table :: TableIdx, offset :: Expr }
 
 type Byte = Int
 type Data =
