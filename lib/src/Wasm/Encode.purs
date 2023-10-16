@@ -8,7 +8,7 @@ import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Foldable (sequence_)
 import Data.Int.Bits as Bits
 import Data.Maybe (Maybe(..))
-import Data.Traversable (for_)
+import Data.Traversable (for_, traverse)
 import DynamicBuffer (DBuffer)
 import DynamicBuffer as DBuffer
 import Effect (Effect)
@@ -206,6 +206,14 @@ write_instr b = case _ of
     DBuffer.addByte b 0xC1
   S.I32Wrap_i64 ->
     DBuffer.addByte b 0xA7
+  S.RefNull t -> do
+    DBuffer.addByte b 0xD0
+    write_ref_type b t
+  S.RefIsNull ->
+    DBuffer.addByte b 0xD1
+  S.RefFunc idx -> do
+    DBuffer.addByte b 0xD2
+    write_u32 b idx
   S.Drop ->
     DBuffer.addByte b 0x1A
   S.Select ->
@@ -437,11 +445,54 @@ write_export_section b exports = write_section b 7 do
 write_start_section :: DBuffer -> S.FuncIdx -> Effect Unit
 write_start_section b idx = write_section b 8 (write_u32 b idx)
 
+elem_index :: S.Expr -> Maybe S.FuncIdx
+elem_index = case _ of
+  [S.RefFunc x] -> Just x
+  _ -> Nothing
+
 write_elem :: DBuffer -> S.Elem -> Effect Unit
-write_elem b { table, offset, init } = do
-  write_u32 b table
-  write_expr b offset
-  write_vec b (map (write_u32 b) init)
+write_elem b { type: ty, init, mode }
+  | ty == S.FuncRef
+  , Just idxs <- traverse elem_index init = case mode of
+     S.ElemPassive -> do
+       write_u32 b 0x01
+       DBuffer.addByte b 0x00 -- S.FuncRef
+       write_vec b (map (write_u32 b) idxs)
+     S.ElemActive { table, offset }
+       | table == 0 && ty == S.FuncRef -> do
+         write_u32 b 0x00
+         write_expr b offset
+         write_vec b (map (write_u32 b) idxs)
+       | otherwise -> do
+         write_u32 b 0x02
+         write_u32 b table
+         write_expr b offset
+         DBuffer.addByte b 0x00 -- S.FuncRef
+         write_vec b (map (write_u32 b) idxs)
+     S.ElemDeclarative -> do
+         write_u32 b 0x03
+         DBuffer.addByte b 0x00 -- S.FuncRef
+         write_vec b (map (write_u32 b) idxs)
+  | otherwise = case mode of
+     S.ElemPassive -> do
+       write_u32 b 0x05
+       DBuffer.addByte b 0x00 -- S.FuncRef
+       write_vec b (map (write_expr b) init)
+     S.ElemActive { table, offset }
+       | table == 0 && ty == S.FuncRef -> do
+         write_u32 b 0x04
+         write_expr b offset
+         write_vec b (map (write_expr b) init)
+       | otherwise -> do
+         write_u32 b 0x06
+         write_u32 b table
+         write_expr b offset
+         DBuffer.addByte b 0x00 -- S.FuncRef
+         write_vec b (map (write_expr b) init)
+     S.ElemDeclarative -> do
+         write_u32 b 0x07
+         DBuffer.addByte b 0x00 -- S.FuncRef
+         write_vec b (map (write_expr b) init)
 
 write_elem_section :: DBuffer -> Array S.Elem -> Effect Unit
 write_elem_section b elems = write_section b 9 do
