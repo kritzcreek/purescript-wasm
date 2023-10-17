@@ -10,3 +10,4 @@ package:
     - maybe
     - partial
     - prelude
+    - strings
