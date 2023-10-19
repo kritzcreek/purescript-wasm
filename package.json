@@ -5,10 +5,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "spago build",
-    "start": "spago run -p example",
-    "format": "purs-tidy format-in-place src example",
-    "pscid": "pscid -I \"lib;example\" --test",
+    "build": "spago build -p minimal",
+    "start": "spago run -p minimal",
+    "format": "purs-tidy format-in-place src example minimal",
+    "pscid": "pscid -I \"lib;minimal\" --test",
     "pscid:test": "npm start; exit 1"
   },
   "author": "",
