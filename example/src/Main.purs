@@ -32,10 +32,14 @@ foreign import runWasmImpl :: EffectFn1 String Unit
 runWasm :: String -> Effect Unit
 runWasm = runEffectFn1 runWasmImpl
 
+foreign import printWasmImpl :: EffectFn1 String Unit
+
+printWasm :: String -> Effect Unit
+printWasm = runEffectFn1 printWasmImpl
+
 input :: String
 input =
   """
-
 twice x = {
   let y = x + x;
   y
