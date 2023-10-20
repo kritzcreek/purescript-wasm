@@ -8,12 +8,13 @@ import Prelude
 import Data.String as String
 import Data.Maybe (Maybe(..))
 
-data RefType = FuncRef | ExternRef
+data RefType = NullFuncRef | FuncRef | ExternRef
 
 derive instance eqRefType :: Eq RefType
 derive instance ordRefType :: Ord RefType
 instance showRefType :: Show RefType where
   show = case _ of
+    NullFuncRef -> "nullfuncref"
     FuncRef -> "funcref"
     ExternRef -> "externref"
 

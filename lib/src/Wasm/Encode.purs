@@ -1,4 +1,4 @@
-module Wasm.Encode (encodeModule) where
+module Wasm.Encode where
 
 import Prelude
 
@@ -349,6 +349,7 @@ write_limits b { min, max } = case max of
 
 write_ref_type :: DBuffer -> S.RefType -> Effect Unit
 write_ref_type b = case _ of
+  S.NullFuncRef -> signed_leb128 b (-0x0d)
   S.FuncRef -> DBuffer.addByte b 0x70
   S.ExternRef -> DBuffer.addByte b 0x6F
 
