@@ -2,7 +2,7 @@ module Printer (printFuncs, printToplevels, printExpr, printDecl) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), Lit(..), Op(..), Toplevel(..))
+import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Toplevel(..), ValTy(..))
 import Data.Array as Array
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
@@ -80,14 +80,33 @@ renderFunc (Func name params body) = do
   let bodyD = renderExpr body
   headerD <+> paramD <+> text "=" <+> bodyD
 
+renderValTy :: forall a. ValTy -> Doc a
+renderValTy = case _ of
+  I32 -> text "i32"
+
+renderFuncTy :: forall a. FuncTy -> Doc a
+renderFuncTy = case _ of
+  FuncTy arguments result ->
+    parens (D.foldWithSeparator (text "," <> D.space) (map renderValTy arguments)) <+> text "->" <+> renderValTy result
+
 renderToplevel :: forall a. Toplevel String -> Doc a
 renderToplevel = case _ of
   TopFunc func -> renderFunc func
   TopLet name init ->
     (text "let" <+> text name <+> text "=") </> renderExpr init <> text ";"
+  TopImport name ty externalName ->
+    text "import"
+    <+> text name
+    <+> text ":"
+    <+> renderFuncTy ty
+    <+> text "from"
+    <+> text externalName
 
 curlies :: forall a. Doc a -> Doc a
 curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
   where
   open = text "{" <> break
   close = break <> text "}"
+
+parens :: forall a. Doc a -> Doc a
+parens = encloseEmptyAlt (text "(") (text ")") (text "()")

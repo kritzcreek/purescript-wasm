@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), Lit(..), Op(..), Toplevel(..))
+import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (fix)
 import Data.Array as Array
@@ -96,6 +96,16 @@ decl e =
   SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e <|>
     ExprD <$> e
 
+valTy :: Parser ValTy
+valTy = l.reserved "i32" $> I32
+
+funcTy :: Parser FuncTy
+funcTy = ado
+  arguments <- l.parens (l.commaSep valTy)
+  l.symbol "->"
+  result <- valTy
+  in FuncTy (Array.fromFoldable arguments) result
+
 topFunc :: Parser (Toplevel String)
 topFunc = ado
   name <- l.identifier
@@ -113,8 +123,18 @@ topLet = ado
   l.symbol ";"
   in TopLet n initializer
 
+topImport :: Parser (Toplevel String)
+topImport = ado
+  l.reserved "import"
+  name <- l.identifier
+  l.symbol ":"
+  ty <- funcTy
+  l.reserved "from"
+  externalName <- l.identifier
+  in TopImport name ty externalName
+
 topLevel :: Parser (Toplevel String)
-topLevel = topLet <|> topFunc
+topLevel = topImport <|> topLet <|> topFunc
 
 parseToplevel :: String -> Either P.ParseError (Array (Toplevel String))
 parseToplevel i = P.runParser i (l.whiteSpace *> Array.some topLevel <* PS.eof)

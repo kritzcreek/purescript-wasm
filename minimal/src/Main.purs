@@ -35,6 +35,9 @@ runWasm = runEffectFn1 runWasmImpl
 input :: String
 input =
   """
+import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
+import clear : (i32) -> i32 from clear_canvas;
+
 let x = 0;
 let y = 500;
 

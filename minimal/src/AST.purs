@@ -50,7 +50,25 @@ derive instance genericFunc :: Generic (Func a) _
 instance showFunc :: Show a => Show (Func a) where
   show x = genericShow x
 
-data Toplevel a = TopFunc (Func a) | TopLet a (Expr a)
+data ValTy = I32
+
+derive instance Eq ValTy
+derive instance Generic ValTy _
+instance Show ValTy where
+  show x = genericShow x
+
+-- Potentially multi value returns?
+data FuncTy = FuncTy (Array ValTy) ValTy
+
+derive instance Eq FuncTy
+derive instance Generic FuncTy _
+instance Show FuncTy where
+  show x = genericShow x
+
+data Toplevel a
+  = TopFunc (Func a)
+  | TopLet a (Expr a)
+  | TopImport a FuncTy String -- Name, Type, ExternalName
 
 derive instance Generic (Toplevel a) _
 instance Show a => Show (Toplevel a) where

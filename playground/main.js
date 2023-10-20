@@ -1,9 +1,45 @@
+import { compileProgram } from "../output/Driver/index.js";
+
+const program = `
+import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
+import clear : (i32) -> i32 from clear_canvas
+
+let x = 0;
+let y = 500;
+
+tick _ = {
+  clear 0;
+  set x = x + 3;
+  set y = if y > 100 { y - 4 } else { y };
+  draw_line 0 0 x y
+}`;
+
+let compiledWasm = compileProgram(program);
+
+const editor = ace.edit("editor");
+editor.setValue(program);
+editor.session.on('change', function(delta) {
+  try {
+    compiledWasm = compileProgram(editor.getValue())
+    initWasm().then(newTick => {
+      clearCanvas()
+      tick = newTick
+    })
+  } catch (err) {
+    console.error(err)
+  }
+});
+
 const canvas = document.getElementById("canvas");
 
 /**
  * @type CanvasRenderingContext2D
  */
 const ctx = canvas.getContext("2d");
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+}
 
 function draw_line(startx, starty, endx, endy) {
   ctx.beginPath()
@@ -15,19 +51,18 @@ function draw_line(startx, starty, endx, endy) {
 
 async function initWasm() {
   const imports = {
-    draw: {
-      line: draw_line
+    env: {
+      draw_line: draw_line,
+      clear_canvas: clearCanvas
     }
   }
-  const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), imports)
+  // const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), imports)
+  const obj = await WebAssembly.instantiate(compiledWasm, imports)
   return () => {
     obj.instance.exports.tick()
   }
 }
 
-const tick = await initWasm()
+let tick = await initWasm()
 
-setInterval(() => {
-  tick()
-}, 100)
-
+setInterval(() => tick(), 100)

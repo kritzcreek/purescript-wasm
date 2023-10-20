@@ -124,17 +124,15 @@ declareImport name ns func tyIdx = do
   mkBuilder \{ imports } -> do
     Ref.modify_ (Map.insert name { index, tyIdx, ns, func }) imports
 
-lookupFuncImport :: forall name. Show name => Ord name => name -> Builder name FuncIdx
+lookupFuncImport :: forall name. Show name => Ord name => name -> Builder name (Maybe FuncIdx)
 lookupFuncImport name =
   mkBuilder \{ imports } -> do
     fs <- Ref.read imports
-    case Map.lookup name fs of
-      Just { index } -> pure index
-      _ -> throw ("undeclared function call: " <> show name)
+    pure (map _.index (Map.lookup name fs))
 
-callImport :: forall name. Show name => Ord name => name -> Builder name Instruction
+callImport :: forall name. Show name => Ord name => name -> Builder name (Maybe Instruction)
 callImport name =
-  map Call (lookupFuncImport name)
+  map (map Call) (lookupFuncImport name)
 
 declareGlobal
   :: forall name

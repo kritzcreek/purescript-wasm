@@ -43,14 +43,19 @@ type FillFunc =
 i32 :: S.ValType
 i32 = S.NumType S.I32
 
-declareImports :: Builder Unit
-declareImports = do
-  drawLine <- Builder.declareType { arguments: [i32, i32, i32, i32], results: [i32] }
-  Builder.declareImport "draw_line" "draw" "line" drawLine
+convertValTy :: Ast.ValTy -> S.ValType
+convertValTy = case _ of
+  Ast.I32 -> i32
+
+convertFuncTy :: Ast.FuncTy -> S.FuncType
+convertFuncTy = case _ of
+  Ast.FuncTy arguments result ->
+    { arguments: map convertValTy arguments
+    , results: [convertValTy result]
+    }
 
 compileToplevels :: Array (Ast.Toplevel String) -> S.Module
 compileToplevels toplevels = Builder.build' do
-  declareImports
   fills <- traverse declareToplevel toplevels
   traverse_ implFunc (Array.catMaybes fills)
   Builder.declareExport "tick" "tick"
@@ -62,6 +67,10 @@ declareToplevel = case _ of
     pure Nothing
   Ast.TopFunc func -> do
     map Just (declareFunc func)
+  Ast.TopImport name ty externalName -> do
+    tyIdx <- Builder.declareType (convertFuncTy ty)
+    _ <- Builder.declareImport name "env" externalName tyIdx
+    pure Nothing
 
 compileConst :: Ast.Expr String -> S.Expr
 compileConst = unsafePartial case _ of
@@ -107,9 +116,10 @@ compileExpr scope = case _ of
         Just r -> r
     args' <- traverse (compileExpr scope) args
 
-    call <- Builder.liftBuilder case fn of
-      "draw_line" -> Builder.callImport "draw_line"
-      _ -> Builder.callFunc fn
+    call <- Builder.liftBuilder do
+      Builder.callImport fn >>= case _ of
+        Just importCall -> pure importCall
+        Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
   Ast.BlockE body -> compileBlock scope body
 
