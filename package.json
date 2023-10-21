@@ -8,12 +8,14 @@
     "build": "spago build -p minimal",
     "start": "spago run -p minimal",
     "format": "purs-tidy format-in-place src example minimal",
+    "play": "echo 'Open the browser at http://127.0.0.1:8080/playground' && live-server . --open=/playground",
     "pscid": "pscid -I \"lib;minimal\" --test",
     "pscid:test": "npm start; exit 1"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "live-server": "^1.2.2",
     "pscid": "^2.11.0",
     "purescript": "^0.15.12",
     "purs-tidy": "^0.10.0",

@@ -14,7 +14,6 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafePartial)
 
-
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
 -- | Also returns a Map that maps every created identifier back to its original name

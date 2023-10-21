@@ -20,7 +20,7 @@ printFuncs showVar funcs =
 
 printExpr :: forall a. (a -> String) -> Expr a -> String
 printExpr showVar expr =
-  print' (renderExpr  showVar expr)
+  print' (renderExpr showVar expr)
 
 printDecl :: forall a. (a -> String) -> Decl a -> String
 printDecl showVar decl =
