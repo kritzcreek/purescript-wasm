@@ -10,21 +10,21 @@ import Dodo as D
 print' :: forall a. Doc a -> String
 print' = print plainText twoSpaces
 
-printProgram :: Program String -> String
-printProgram toplevels =
-  print' (Array.intercalate (break <> break) (map renderToplevel toplevels))
+printProgram :: forall a. (a -> String) -> Program a -> String
+printProgram showVar toplevels =
+  print' (Array.intercalate (break <> break) (map (renderToplevel showVar) toplevels))
 
-printFuncs :: Array (Func String) -> String
-printFuncs funcs =
-  print' (Array.intercalate (break <> break) (map renderFunc funcs))
+printFuncs :: forall a. (a -> String) -> Array (Func a) -> String
+printFuncs showVar funcs =
+  print' (Array.intercalate (break <> break) (map (renderFunc showVar) funcs))
 
-printExpr :: Expr String -> String
-printExpr expr =
-  print' (renderExpr expr)
+printExpr :: forall a. (a -> String) -> Expr a -> String
+printExpr showVar expr =
+  print' (renderExpr  showVar expr)
 
-printDecl :: Decl String -> String
-printDecl decl =
-  print' (renderDecl decl)
+printDecl :: forall a. (a -> String) -> Decl a -> String
+printDecl showVar decl =
+  print' (renderDecl showVar decl)
 
 renderOp :: forall a. Op -> Doc a
 renderOp = text <<< case _ of
@@ -46,38 +46,38 @@ renderLit = case _ of
     text (show x)
 
 -- TODO: Prec based parenthesis
-renderExpr :: forall a. Expr String -> Doc a
-renderExpr = case _ of
+renderExpr :: forall a name. (name -> String) -> Expr name -> Doc a
+renderExpr showVar = case _ of
   LitE lit ->
     renderLit lit
   VarE v ->
-    text v
+    text (showVar v)
   BinOpE op l r ->
-    renderExpr l <+> renderOp op <+> renderExpr r
+    renderExpr showVar l <+> renderOp op <+> renderExpr showVar r
   IfE cond t e ->
-    text "if" <+> renderExpr cond
-      <+> renderExpr t
+    text "if" <+> renderExpr showVar cond
+      <+> renderExpr showVar t
       <+> text "else"
-      <+> renderExpr e
+      <+> renderExpr showVar e
   CallE func arg ->
-    renderExpr func <+> renderExpr arg
+    renderExpr showVar func <+> renderExpr showVar arg
   BlockE body ->
-    curlies (D.foldWithSeparator (text ";" <> break) (map renderDecl body))
+    curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl showVar) body))
 
-renderDecl :: forall a. Decl String -> Doc a
-renderDecl = case _ of
+renderDecl :: forall a name. (name -> String) -> Decl name -> Doc a
+renderDecl showVar = case _ of
   LetD name expr ->
-    (text "let" <+> text name <+> text "=") </> renderExpr expr
+    (text "let" <+> text (showVar name) <+> text "=") </> renderExpr showVar expr
   SetD name expr ->
-    (text "set" <+> text name <+> text "=") </> renderExpr expr
+    (text "set" <+> text (showVar name) <+> text "=") </> renderExpr showVar expr
   ExprD expr ->
-    renderExpr expr
+    renderExpr showVar expr
 
-renderFunc :: forall a. Func String -> Doc a
-renderFunc (Func name params body) = do
-  let headerD = text name
-  let paramD = D.words (map text params)
-  let bodyD = renderExpr body
+renderFunc :: forall a name. (name -> String) -> Func name -> Doc a
+renderFunc showVar (Func name params body) = do
+  let headerD = text (showVar name)
+  let paramD = D.words (map (text <<< showVar) params)
+  let bodyD = renderExpr showVar body
   headerD <+> paramD <+> text "=" <+> bodyD
 
 renderValTy :: forall a. ValTy -> Doc a
@@ -89,14 +89,14 @@ renderFuncTy = case _ of
   FuncTy arguments result ->
     parens (D.foldWithSeparator (text "," <> D.space) (map renderValTy arguments)) <+> text "->" <+> renderValTy result
 
-renderToplevel :: forall a. Toplevel String -> Doc a
-renderToplevel = case _ of
-  TopFunc func -> renderFunc func
+renderToplevel :: forall a name. (name -> String) -> Toplevel name -> Doc a
+renderToplevel showVar = case _ of
+  TopFunc func -> renderFunc showVar func
   TopLet name init ->
-    (text "let" <+> text name <+> text "=") </> renderExpr init <> text ";"
+    (text "let" <+> text (showVar name) <+> text "=") </> renderExpr showVar init <> text ";"
   TopImport name ty externalName ->
     text "import"
-      <+> text name
+      <+> text (showVar name)
       <+> text ":"
       <+> renderFuncTy ty
       <+> text "from"

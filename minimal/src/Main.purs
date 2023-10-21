@@ -53,7 +53,7 @@ main = do
   case Parser.parseProgram input of
     Left err -> Console.logShow err
     Right program -> do
-      Console.log (Printer.printProgram program)
+      Console.log (Printer.printProgram identity program)
       let bytes = Encode.encodeModule (Compiler.compileProgram program)
       writeToFile "playground/bytes.wasm" bytes case _ of
         Nothing ->

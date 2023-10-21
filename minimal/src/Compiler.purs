@@ -113,7 +113,7 @@ compileExpr scope = case _ of
   Ast.CallE func arg -> do
     let
       { fn, args } = case unfoldCall func [ arg ] of
-        Nothing -> unsafeCrashWith ("Can't unfold " <> Printer.printExpr (Ast.CallE func arg))
+        Nothing -> unsafeCrashWith ("Can't unfold " <> Printer.printExpr identity (Ast.CallE func arg))
         Just r -> r
     args' <- traverse (compileExpr scope) args
 
