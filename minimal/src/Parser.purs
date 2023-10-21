@@ -1,11 +1,11 @@
 module Parser
   ( parseExpr
-  , parseToplevel
+  , parseProgram
   ) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (fix)
 import Data.Array as Array
@@ -92,9 +92,10 @@ parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 
 decl :: Parser (Expr String) -> Parser (Decl String)
 decl e =
-  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e <|>
-  SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e <|>
-    ExprD <$> e
+  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e
+    <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e
+    <|>
+      ExprD <$> e
 
 valTy :: Parser ValTy
 valTy = l.reserved "i32" $> I32
@@ -136,5 +137,5 @@ topImport = ado
 topLevel :: Parser (Toplevel String)
 topLevel = topImport <|> topLet <|> topFunc
 
-parseToplevel :: String -> Either P.ParseError (Array (Toplevel String))
-parseToplevel i = P.runParser i (l.whiteSpace *> Array.some topLevel <* PS.eof)
+parseProgram :: String -> Either P.ParseError (Program String)
+parseProgram i = P.runParser i (l.whiteSpace *> Array.some topLevel <* PS.eof)

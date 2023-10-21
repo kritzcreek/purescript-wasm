@@ -73,3 +73,5 @@ data Toplevel a
 derive instance Generic (Toplevel a) _
 instance Show a => Show (Toplevel a) where
   show x = genericShow x
+
+type Program a = Array (Toplevel a)

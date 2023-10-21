@@ -1,8 +1,8 @@
-module Printer (printFuncs, printToplevels, printExpr, printDecl) where
+module Printer (printFuncs, printProgram, printExpr, printDecl) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Data.Array as Array
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
@@ -10,8 +10,8 @@ import Dodo as D
 print' :: forall a. Doc a -> String
 print' = print plainText twoSpaces
 
-printToplevels :: Array (Toplevel String) -> String
-printToplevels toplevels =
+printProgram :: Program String -> String
+printProgram toplevels =
   print' (Array.intercalate (break <> break) (map renderToplevel toplevels))
 
 printFuncs :: Array (Func String) -> String
@@ -96,11 +96,11 @@ renderToplevel = case _ of
     (text "let" <+> text name <+> text "=") </> renderExpr init <> text ";"
   TopImport name ty externalName ->
     text "import"
-    <+> text name
-    <+> text ":"
-    <+> renderFuncTy ty
-    <+> text "from"
-    <+> text externalName
+      <+> text name
+      <+> text ":"
+      <+> renderFuncTy ty
+      <+> text "from"
+      <+> text externalName
 
 curlies :: forall a. Doc a -> Doc a
 curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent

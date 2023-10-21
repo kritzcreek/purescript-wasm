@@ -11,7 +11,7 @@ import Wasm.Encode as Encode
 
 compileProgram :: String -> Uint8Array
 compileProgram input = do
-  case Parser.parseToplevel input of
+  case Parser.parseProgram input of
     Left err -> unsafeCrashWith ("Failed to parse with: " <> show err)
     Right toplevels ->
-      Encode.encodeModule (Compiler.compileToplevels toplevels)
+      Encode.encodeModule (Compiler.compileProgram toplevels)

@@ -50,14 +50,14 @@ tick _ = {
 
 main :: Effect Unit
 main = do
-  case Parser.parseToplevel input of
+  case Parser.parseProgram input of
     Left err -> Console.logShow err
-    Right toplevels -> do
-      Console.log (Printer.printToplevels toplevels)
-      let bytes = Encode.encodeModule (Compiler.compileToplevels toplevels)
+    Right program -> do
+      Console.log (Printer.printProgram program)
+      let bytes = Encode.encodeModule (Compiler.compileProgram program)
       writeToFile "playground/bytes.wasm" bytes case _ of
         Nothing ->
           pure unit
-          -- runWasm "bytes.wasm"
+        -- runWasm "bytes.wasm"
         Just err ->
           Console.log ("Failed to write the wasm module" <> show err)

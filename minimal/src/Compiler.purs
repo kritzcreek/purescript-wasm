@@ -1,7 +1,8 @@
-module Compiler (compileToplevels) where
+module Compiler (compileProgram) where
 
 import Prelude
 
+import Ast (Program)
 import Ast as Ast
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
@@ -51,11 +52,11 @@ convertFuncTy :: Ast.FuncTy -> S.FuncType
 convertFuncTy = case _ of
   Ast.FuncTy arguments result ->
     { arguments: map convertValTy arguments
-    , results: [convertValTy result]
+    , results: [ convertValTy result ]
     }
 
-compileToplevels :: Array (Ast.Toplevel String) -> S.Module
-compileToplevels toplevels = Builder.build' do
+compileProgram :: Program String -> S.Module
+compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
   traverse_ implFunc (Array.catMaybes fills)
   Builder.declareExport "tick" "tick"
@@ -74,7 +75,7 @@ declareToplevel = case _ of
 
 compileConst :: Ast.Expr String -> S.Expr
 compileConst = unsafePartial case _ of
-  Ast.LitE (Ast.IntLit x) -> [S.I32Const x]
+  Ast.LitE (Ast.IntLit x) -> [ S.I32Const x ]
 
 compileOp :: Ast.Op -> S.Instruction
 compileOp = case _ of
@@ -140,7 +141,7 @@ compileBlock outer decls = withBlock outer \scope -> do
       result <- compileExpr scope' expr
       pure (instrs <> result)
     _ ->
-      unsafeCrashWith "Function body must end in an expression."
+      unsafeCrashWith "block must end in an expression."
   where
   go
     :: { scope :: Scope, instrs :: S.Expr }
