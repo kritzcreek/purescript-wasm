@@ -57,8 +57,7 @@ main = do
       Console.log (Printer.printProgram identity program)
       let
         renamed = Rename.renameProg program
-        exportTick = Rename.findFunc renamed.nameMap "tick"
-        bytes = Encode.encodeModule (Compiler.compileProgram renamed.result exportTick)
+        bytes = Encode.encodeModule (Compiler.compileProgram renamed.result)
       writeToFile "playground/bytes.wasm" bytes case _ of
         Nothing ->
           pure unit

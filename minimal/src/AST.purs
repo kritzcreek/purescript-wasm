@@ -4,6 +4,7 @@ import Prelude
 
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Generic.Rep (class Generic)
+import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 
 data Op = Add | Sub | Mul | Div | Lt | Gt | Lte | Gte | Eq
@@ -44,11 +45,12 @@ isLetD = case _ of
   LetD _ _ -> true
   _ -> false
 
-data Func a = Func a (NonEmptyArray a) (Expr a)
-
-derive instance genericFunc :: Generic (Func a) _
-instance showFunc :: Show a => Show (Func a) where
-  show x = genericShow x
+type Func a =
+  { name :: a
+  , export :: Maybe String
+  , params :: NonEmptyArray a
+  , body :: Expr a
+  }
 
 data ValTy = I32
 

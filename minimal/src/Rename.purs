@@ -2,7 +2,7 @@ module Rename (Var(..), printVar, renameProg, findFunc) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), Program, Toplevel(..))
+import Ast (Decl(..), Expr(..), Program, Toplevel(..))
 import Control.Monad.State (State)
 import Control.Monad.State as State
 import Data.Array as Array
@@ -43,9 +43,9 @@ renameProg prog = do
 findFunc :: Map Var String -> String -> Var
 findFunc nameMap name = unsafePartial Maybe.fromJust (Array.findMap search (Map.toUnfoldable nameMap))
   where
-    search = case _ of
-      Tuple v@(FunctionV _) n | n == name -> Just v
-      _ -> Nothing
+  search = case _ of
+    Tuple v@(FunctionV _) n | n == name -> Just v
+    _ -> Nothing
 
 type Scope = NEL.NonEmptyList (Map String Var)
 
@@ -92,12 +92,12 @@ renameToplevel = case _ of
   TopImport name ty externalName -> do
     var <- mkVar FunctionV name
     pure (TopImport var ty externalName)
-  TopFunc (Func name params body) -> do
+  TopFunc { name, export, params, body } -> do
     nameVar <- mkVar FunctionV name
     withBlock do
       paramVars <- traverse (mkVar LocalV) params
       body' <- renameExpr body
-      pure (TopFunc (Func nameVar paramVars body'))
+      pure (TopFunc { name: nameVar, export, params: paramVars, body: body' })
   TopLet name expr -> do
     expr' <- renameExpr expr
     var <- mkVar GlobalV name

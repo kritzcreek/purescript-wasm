@@ -18,10 +18,8 @@ compileProgram input = do
   case Parser.parseProgram input of
     Left err -> unsafeCrashWith ("Failed to parse with: " <> show err)
     Right program -> do
-      let
-        renamed = Rename.renameProg program
-        exportTick = Rename.findFunc renamed.nameMap "tick"
-      Encode.encodeModule (Compiler.compileProgram renamed.result exportTick)
+      let renamed = Rename.renameProg program
+      Encode.encodeModule (Compiler.compileProgram renamed.result)
 
 renameProgram :: String -> String
 renameProgram input =

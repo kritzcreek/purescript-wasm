@@ -38,12 +38,10 @@ convertFuncTy = case _ of
     , results: [ convertValTy result ]
     }
 
--- TODO: Declaring the export like this is a hack. Add an 'export' syntax?
-compileProgram :: Program Var -> Var -> S.Module
-compileProgram toplevels exportTick = Builder.build' do
+compileProgram :: Program Var -> S.Module
+compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
   traverse_ implFunc (Array.catMaybes fills)
-  Builder.declareExport exportTick "tick"
 
 declareToplevel :: Ast.Toplevel Var -> Builder (Maybe FillFunc)
 declareToplevel = case _ of
@@ -51,7 +49,11 @@ declareToplevel = case _ of
     _ <- Builder.declareGlobal name { mutability: S.Var, type: (S.NumType S.I32) } (compileConst init)
     pure Nothing
   Ast.TopFunc func -> do
-    map Just (declareFunc func)
+    result <- declareFunc func
+    case func.export of
+      Nothing -> pure unit
+      Just exportName -> Builder.declareExport func.name exportName
+    pure (Just result)
   Ast.TopImport name ty externalName -> do
     tyIdx <- Builder.declareType (convertFuncTy ty)
     _ <- Builder.declareImport name "env" externalName tyIdx
@@ -149,16 +151,16 @@ compileBlock decls = do
         _ -> unsafeCrashWith "Unknown set target"
 
 declareFunc :: Ast.Func Var -> Builder FillFunc
-declareFunc func@(Ast.Func name params _) = do
+declareFunc func = do
   fill <- Builder.declareFunc
-    name
-    { arguments: map (const i32) (NEA.toArray params)
+    func.name
+    { arguments: map (const i32) (NEA.toArray func.params)
     , results: [ i32 ]
     }
   pure { fill, func }
 
 implFunc :: FillFunc -> Builder Unit
-implFunc { fill, func: Ast.Func _ params body } = do
-  let paramTys = NEA.toArray (map (\v -> Tuple v i32) params)
-  fnBody <- bodyBuild paramTys (compileExpr body)
+implFunc { fill, func } = do
+  let paramTys = NEA.toArray (map (\v -> Tuple v i32) func.params)
+  fnBody <- bodyBuild paramTys (compileExpr func.body)
   fill fnBody.locals fnBody.result

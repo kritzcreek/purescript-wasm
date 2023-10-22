@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (fix)
 import Data.Array as Array
@@ -113,7 +113,7 @@ topFunc = ado
   params <- many1 l.identifier
   _ <- l.symbol "="
   body <- expr
-  in TopFunc (Func name params body)
+  in TopFunc { name, export: Just name, params, body }
 
 topLet :: Parser (Toplevel String)
 topLet = ado

@@ -2,7 +2,7 @@ module Printer (printFuncs, printProgram, printExpr, printDecl) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr(..), Func, FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Data.Array as Array
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
@@ -74,10 +74,10 @@ renderDecl showVar = case _ of
     renderExpr showVar expr
 
 renderFunc :: forall a name. (name -> String) -> Func name -> Doc a
-renderFunc showVar (Func name params body) = do
-  let headerD = text (showVar name)
-  let paramD = D.words (map (text <<< showVar) params)
-  let bodyD = renderExpr showVar body
+renderFunc showVar func = do
+  let headerD = text (showVar func.name)
+  let paramD = D.words (map (text <<< showVar) func.params)
+  let bodyD = renderExpr showVar func.body
   headerD <+> paramD <+> text "=" <+> bodyD
 
 renderValTy :: forall a. ValTy -> Doc a
