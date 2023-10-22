@@ -10,3 +10,4 @@
 /.spago
 /package-lock.json
 /bytes.wasm
+/playground/bytes.wasm
