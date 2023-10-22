@@ -14,6 +14,7 @@ module WasmBuilder
   , lookupGlobal
   , declareType
   , newLocal
+  , getLocal
   , liftBuilder
   ) where
 
@@ -22,6 +23,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
@@ -156,11 +158,13 @@ lookupGlobal
    . Show name
   => Ord name
   => name
-  -> Builder name (Maybe GlobalIdx)
+  -> Builder name GlobalIdx
 lookupGlobal name = do
   mkBuilder \{ globals } -> do
     gs <- Ref.read globals
-    pure (map _.index (Map.lookup name gs))
+    case Map.lookup name gs of
+      Nothing -> throw ("undeclared global: " <> show name)
+      Just { index } -> pure index
 
 nextFuncIdx :: forall name. Builder name FuncIdx
 nextFuncIdx =
@@ -286,14 +290,11 @@ build' b = case build b of
   Right m -> m
   Left err -> unsafeCrashWith (show err)
 
-type LocalData = { index :: LocalIdx, type :: ValType }
+type LocalData = { index :: LocalIdx, ty :: ValType }
 
-type BodyEnv =
-  { params :: Array ValType
-  , locals :: Ref (Array ValType)
-  }
+type BodyEnv name = { locals :: Ref (Map name LocalData) }
 
-newtype BodyBuilder name a = BodyBuilder (ReaderT BodyEnv (Builder name) a)
+newtype BodyBuilder name a = BodyBuilder (ReaderT (BodyEnv name) (Builder name) a)
 
 derive newtype instance Functor (BodyBuilder name)
 derive newtype instance Apply (BodyBuilder name)
@@ -301,40 +302,63 @@ derive newtype instance Applicative (BodyBuilder name)
 derive newtype instance Bind (BodyBuilder name)
 derive newtype instance Monad (BodyBuilder name)
 
-initialBodyEnv :: Array ValType -> Effect BodyEnv
+initialBodyEnv :: forall name. Ord name => Array (Tuple name ValType) -> Effect (BodyEnv name)
 initialBodyEnv params = ado
-  locals <- Ref.new []
-  in { params, locals }
+  locals <- Ref.new (Map.fromFoldable (Array.mapWithIndex (\index (Tuple name ty) -> Tuple name { index, ty }) params))
+  in { locals }
 
 nextLocalIdx :: forall name. BodyBuilder name LocalIdx
 nextLocalIdx =
-  mkBodyBuilder \{ params, locals } -> liftEffect ado
-    localCount <- map Array.length (Ref.read locals)
-    in localCount + Array.length params
+  mkBodyBuilder \{ locals } -> liftEffect (map Map.size (Ref.read locals))
 
-mkBodyBuilder :: forall name a. (BodyEnv -> Builder name a) -> BodyBuilder name a
+mkBodyBuilder :: forall name a. (BodyEnv name -> Builder name a) -> BodyBuilder name a
 mkBodyBuilder act = BodyBuilder (ReaderT act)
 
 bodyBuild
   :: forall name a
-   . Array ValType
+   . Ord name
+  => Array (Tuple name ValType)
   -> BodyBuilder name a
   -> Builder name { result :: a, locals :: Array ValType }
 bodyBuild params (BodyBuilder b) = do
   env <- liftEffect (initialBodyEnv params)
   result <- runReaderT b env
-  locals <- liftEffect (Ref.read env.locals)
+  ls <- liftEffect (Ref.read env.locals)
+  let
+    paramCount = Array.length params
+    locals =
+      Map.values ls
+        -- remove all params
+        # List.mapMaybe (\local -> if local.index >= paramCount then Just local else Nothing)
+        # Array.fromFoldable
+        # Array.sortWith _.index
+        # map _.ty
   pure { result, locals }
 
 newLocal
   :: forall name
-   . ValType
+   . Ord name
+  => name
+  -> ValType
   -> BodyBuilder name LocalIdx
-newLocal ty = do
+newLocal name ty = do
   index <- nextLocalIdx
   mkBodyBuilder \{ locals } -> liftEffect do
-    Ref.modify_ (\l -> Array.snoc l ty) locals
+    Ref.modify_ (Map.insert name { index, ty }) locals
     pure index
+
+getLocal
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> BodyBuilder name LocalIdx
+getLocal name = do
+  mkBodyBuilder \{ locals } -> liftEffect do
+    ls <- Ref.read locals
+    case Map.lookup name ls of
+      Nothing -> throw ("undeclared global: " <> show name)
+      Just { index } -> pure index
 
 liftBuilder :: forall name a. Builder name a -> BodyBuilder name a
 liftBuilder b = mkBodyBuilder (\_ -> b)

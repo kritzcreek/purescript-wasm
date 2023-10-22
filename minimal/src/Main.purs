@@ -14,6 +14,7 @@ import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn3, mkEffectFn1, runEffectFn1, runEffectFn3)
 import Parser as Parser
 import Printer as Printer
+import Rename as Rename
 import Wasm.Encode as Encode
 
 foreign import writeToFileImpl
@@ -36,7 +37,7 @@ input :: String
 input =
   """
 import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
-import clear : (i32) -> i32 from clear_canvas;
+import clear : (i32) -> i32 from clear_canvas
 
 let x = 0;
 let y = 500;
@@ -54,7 +55,10 @@ main = do
     Left err -> Console.logShow err
     Right program -> do
       Console.log (Printer.printProgram identity program)
-      let bytes = Encode.encodeModule (Compiler.compileProgram program)
+      let
+        renamed = Rename.renameProg program
+        exportTick = Rename.findFunc renamed.nameMap "tick"
+        bytes = Encode.encodeModule (Compiler.compileProgram renamed.result exportTick)
       writeToFile "playground/bytes.wasm" bytes case _ of
         Nothing ->
           pure unit

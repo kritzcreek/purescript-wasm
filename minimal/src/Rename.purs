@@ -1,53 +1,78 @@
-module Rename (renameProg) where
+module Rename (Var(..), printVar, renameProg, findFunc) where
 
 import Prelude
 
 import Ast (Decl(..), Expr(..), Func(..), Program, Toplevel(..))
 import Control.Monad.State (State)
 import Control.Monad.State as State
+import Data.Array as Array
 import Data.List as List
 import Data.List.NonEmpty as NEL
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafePartial)
 
+data Var
+  = GlobalV Int
+  | LocalV Int
+  | FunctionV Int
+
+derive instance Eq Var
+derive instance Ord Var
+instance Show Var where
+  show = printVar
+
+printVar :: Var -> String
+printVar = case _ of
+  GlobalV x -> "$g" <> show x
+  LocalV x -> "$l" <> show x
+  FunctionV x -> "$f" <> show x
+
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
 -- | Also returns a Map that maps every created identifier back to its original name
-renameProg :: Program String -> { nameMap :: Map Int String, result :: Program Int }
+renameProg :: Program String -> { nameMap :: Map Var String, result :: Program Var }
 renameProg prog = do
   let (Tuple prog' s) = State.runState (renameProg' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
   { result: prog', nameMap: s.nameMap }
 
-type Scope = NEL.NonEmptyList (Map String Int)
+findFunc :: Map Var String -> String -> Var
+findFunc nameMap name = unsafePartial Maybe.fromJust (Array.findMap search (Map.toUnfoldable nameMap))
+  where
+    search = case _ of
+      Tuple v@(FunctionV _) n | n == name -> Just v
+      _ -> Nothing
 
-lookupScope :: String -> Scope -> Int
+type Scope = NEL.NonEmptyList (Map String Var)
+
+lookupScope :: String -> Scope -> Var
 lookupScope n s = unsafePartial Maybe.fromJust (List.findMap (\blockScope -> Map.lookup n blockScope) s)
 
-addVar :: String -> Int -> Scope -> Scope
+addVar :: String -> Var -> Scope -> Scope
 addVar n idx scope = do
   let { head, tail } = NEL.uncons scope
   NEL.cons' (Map.insert n idx head) tail
 
-type Rename a = State { scope :: Scope, supply :: Int, nameMap :: Map Int String } a
+type Rename a = State { scope :: Scope, supply :: Int, nameMap :: Map Var String } a
 
-mkVar :: String -> Rename Int
-mkVar name = do
+mkVar :: (Int -> Var) -> String -> Rename Var
+mkVar mk name = do
   { supply } <- State.modify
     ( \s -> do
-        let var = s.supply + 1
+        let var = mk (s.supply + 1)
         s
-          { supply = var
+          { supply = s.supply + 1
           , nameMap = Map.insert var name s.nameMap
           , scope = addVar name var s.scope
           }
     )
-  pure supply
+  pure (mk supply)
 
-lookupVar :: String -> Rename Int
+lookupVar :: String -> Rename Var
 lookupVar name = do
   State.gets (\s -> lookupScope name s.scope)
 
@@ -59,26 +84,26 @@ withBlock f = do
   State.modify_ (_ { scope = oldScope })
   pure res
 
-renameProg' :: Program String -> Rename (Program Int)
+renameProg' :: Program String -> Rename (Program Var)
 renameProg' prog = traverse renameToplevel prog
 
-renameToplevel :: Toplevel String -> Rename (Toplevel Int)
+renameToplevel :: Toplevel String -> Rename (Toplevel Var)
 renameToplevel = case _ of
   TopImport name ty externalName -> do
-    var <- mkVar name
+    var <- mkVar FunctionV name
     pure (TopImport var ty externalName)
   TopFunc (Func name params body) -> do
-    nameVar <- mkVar name
+    nameVar <- mkVar FunctionV name
     withBlock do
-      paramVars <- traverse mkVar params
+      paramVars <- traverse (mkVar LocalV) params
       body' <- renameExpr body
       pure (TopFunc (Func nameVar paramVars body'))
   TopLet name expr -> do
     expr' <- renameExpr expr
-    var <- mkVar name
+    var <- mkVar GlobalV name
     pure (TopLet var expr')
 
-renameExpr :: Expr String -> Rename (Expr Int)
+renameExpr :: Expr String -> Rename (Expr Var)
 renameExpr = case _ of
   LitE lit -> pure (LitE lit)
   VarE v -> do
@@ -103,11 +128,11 @@ renameExpr = case _ of
 
 renameDecl
   :: Decl String
-  -> Rename (Decl Int)
+  -> Rename (Decl Var)
 renameDecl = case _ of
   LetD binder expr -> do
     expr' <- renameExpr expr
-    var <- mkVar binder
+    var <- mkVar LocalV binder
     pure (LetD var expr')
   SetD binder expr -> do
     var <- lookupVar binder

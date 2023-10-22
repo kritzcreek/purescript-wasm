@@ -1,4 +1,4 @@
-import { compileProgram } from "../output/Driver/index.js";
+import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
 const program = `
 import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
@@ -18,8 +18,13 @@ let compiledWasm = compileProgram(program);
 
 const editor = ace.edit("editor");
 editor.setValue(program);
+
+let renamed = renameProgram(editor.getValue())
 editor.session.on('change', function(delta) {
   try {
+    renamed = renameProgram(editor.getValue())
+    document.getElementById("output").innerText = renamed
+
     compiledWasm = compileProgram(editor.getValue())
     initWasm().then(newTick => {
       clearCanvas()
@@ -63,6 +68,7 @@ async function initWasm() {
   }
 }
 
+document.getElementById("output").innerText = renamed
 let tick = await initWasm()
 
 setInterval(() => tick(), 100)

@@ -6,39 +6,22 @@ import Ast (Program)
 import Ast as Ast
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
-import Data.FoldableWithIndex (foldlWithIndex)
-import Data.List as List
-import Data.List.NonEmpty as NEL
-import Data.Map (Map)
-import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Maybe as Maybe
 import Data.Traversable (traverse, traverse_)
+import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Printer as Printer
+import Rename (Var(..))
 import Wasm.Syntax as S
 import WasmBuilder (bodyBuild)
 import WasmBuilder as Builder
 
-type Builder = Builder.Builder String
-type BodyBuilder = Builder.BodyBuilder String
-
-type Scope = NEL.NonEmptyList (Map String S.LocalIdx)
-
-withBlock :: forall a. Scope -> (Scope -> a) -> a
-withBlock s f = f (NEL.cons Map.empty s)
-
-lookupScope :: String -> Scope -> S.LocalIdx
-lookupScope n s = unsafePartial Maybe.fromJust (List.findMap (\blockScope -> Map.lookup n blockScope) s)
-
-addLocal :: String -> S.LocalIdx -> Scope -> Scope
-addLocal n idx scope = do
-  let { head, tail } = NEL.uncons scope
-  NEL.cons' (Map.insert n idx head) tail
+type Builder = Builder.Builder Var
+type BodyBuilder = Builder.BodyBuilder Var
 
 type FillFunc =
   { fill :: Array S.ValType -> S.Expr -> Builder Unit
-  , func :: Ast.Func String
+  , func :: Ast.Func Var
   }
 
 i32 :: S.ValType
@@ -55,13 +38,14 @@ convertFuncTy = case _ of
     , results: [ convertValTy result ]
     }
 
-compileProgram :: Program String -> S.Module
-compileProgram toplevels = Builder.build' do
+-- TODO: Declaring the export like this is a hack. Add an 'export' syntax?
+compileProgram :: Program Var -> Var -> S.Module
+compileProgram toplevels exportTick = Builder.build' do
   fills <- traverse declareToplevel toplevels
   traverse_ implFunc (Array.catMaybes fills)
-  Builder.declareExport "tick" "tick"
+  Builder.declareExport exportTick "tick"
 
-declareToplevel :: Ast.Toplevel String -> Builder (Maybe FillFunc)
+declareToplevel :: Ast.Toplevel Var -> Builder (Maybe FillFunc)
 declareToplevel = case _ of
   Ast.TopLet name init -> do
     _ <- Builder.declareGlobal name { mutability: S.Var, type: (S.NumType S.I32) } (compileConst init)
@@ -73,7 +57,7 @@ declareToplevel = case _ of
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
 
-compileConst :: Ast.Expr String -> S.Expr
+compileConst :: forall a. Ast.Expr a -> S.Expr
 compileConst = unsafePartial case _ of
   Ast.LitE (Ast.IntLit x) -> [ S.I32Const x ]
 
@@ -94,35 +78,40 @@ compileLit = case _ of
   Ast.IntLit x -> [ S.I32Const x ]
   Ast.BoolLit b -> [ if b then S.I32Const 1 else S.I32Const 0 ]
 
-compileExpr :: Scope -> Ast.Expr String -> BodyBuilder (Array S.Instruction)
-compileExpr scope = case _ of
+compileExpr :: Ast.Expr Var -> BodyBuilder (Array S.Instruction)
+compileExpr = case _ of
   Ast.LitE lit -> pure (compileLit lit)
-  Ast.VarE x -> do
-    Builder.liftBuilder (Builder.lookupGlobal x) >>= case _ of
-      Nothing -> pure [ S.LocalGet (lookupScope x scope) ]
-      Just idx -> pure [ S.GlobalGet idx ]
+  Ast.VarE x -> case x of
+    GlobalV _ -> do
+      ix <- Builder.liftBuilder (Builder.lookupGlobal x)
+      pure [ S.GlobalGet ix ]
+    LocalV _ -> do
+      ix <- Builder.getLocal x
+      pure [ S.LocalGet ix ]
+    FunctionV _ -> do
+      unsafeCrashWith "illegal function reference in variable position"
   Ast.BinOpE op l r -> ado
-    l' <- compileExpr scope l
-    r' <- compileExpr scope r
+    l' <- compileExpr l
+    r' <- compileExpr r
     in l' <> r' <> [ compileOp op ]
   Ast.IfE cond t e -> ado
-    cond' <- compileExpr scope cond
-    t' <- compileExpr scope t
-    e' <- compileExpr scope e
+    cond' <- compileExpr cond
+    t' <- compileExpr t
+    e' <- compileExpr e
     in cond' <> [ S.If (S.BlockValType (Just (S.NumType S.I32))) t' e' ]
   Ast.CallE func arg -> do
     let
       { fn, args } = case unfoldCall func [ arg ] of
-        Nothing -> unsafeCrashWith ("Can't unfold " <> Printer.printExpr identity (Ast.CallE func arg))
+        Nothing -> unsafeCrashWith ("Can't unfold " <> Printer.printExpr show (Ast.CallE func arg))
         Just r -> r
-    args' <- traverse (compileExpr scope) args
+    args' <- traverse compileExpr args
 
     call <- Builder.liftBuilder do
       Builder.callImport fn >>= case _ of
         Just importCall -> pure importCall
         Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
-  Ast.BlockE body -> compileBlock scope body
+  Ast.BlockE body -> compileBlock body
 
 unfoldCall :: forall a. Ast.Expr a -> Array (Ast.Expr a) -> Maybe { fn :: a, args :: Array (Ast.Expr a) }
 unfoldCall f args = case f of
@@ -131,57 +120,45 @@ unfoldCall f args = case f of
   _ -> Nothing
 
 compileBlock
-  :: Scope
-  -> Array (Ast.Decl String)
+  :: Array (Ast.Decl Var)
   -> BodyBuilder (Array S.Instruction)
-compileBlock outer decls = withBlock outer \scope -> do
+compileBlock decls = do
   case Array.unsnoc decls of
     Just { init, last: Ast.ExprD expr } -> do
-      { instrs, scope: scope' } <- Array.foldM go { scope, instrs: [] } init
-      result <- compileExpr scope' expr
-      pure (instrs <> result)
+      instrs <- traverse go init
+      result <- compileExpr expr
+      pure (Array.concat instrs <> result)
     _ ->
       unsafeCrashWith "block must end in an expression."
   where
-  go
-    :: { scope :: Scope, instrs :: S.Expr }
-    -> Ast.Decl String
-    -> BodyBuilder { scope :: Scope, instrs :: S.Expr }
-  go { scope, instrs } = case _ of
+  go :: Ast.Decl Var -> BodyBuilder S.Expr
+  go = case _ of
     Ast.ExprD expr -> do
-      is <- compileExpr scope expr
-      pure { scope, instrs: instrs <> is <> [ S.Drop ] }
+      is <- compileExpr expr
+      pure (is <> [ S.Drop ])
     Ast.LetD n e -> do
-      var <- Builder.newLocal (S.NumType S.I32)
-      let scope' = addLocal n var scope
-      is <- compileExpr scope' e
-      pure
-        { scope: scope'
-        , instrs: instrs <> is <> [ S.LocalSet var ]
-        }
+      var <- Builder.newLocal n (S.NumType S.I32)
+      is <- compileExpr e
+      pure (is <> [ S.LocalSet var ])
     Ast.SetD n e -> do
-      ix <- Builder.liftBuilder (Builder.lookupGlobal n) >>= case _ of
-        Nothing -> unsafeCrashWith ("Unknown set target " <> n)
-        Just ix -> pure ix
-      is <- compileExpr scope e
-      pure
-        { scope
-        , instrs: instrs <> is <> [ S.GlobalSet ix ]
-        }
+      case n of
+        GlobalV _ -> do
+          ix <- Builder.liftBuilder (Builder.lookupGlobal n)
+          is <- compileExpr e
+          pure (is <> [ S.GlobalSet ix ])
+        _ -> unsafeCrashWith "Unknown set target"
 
-declareFunc :: Ast.Func String -> Builder FillFunc
+declareFunc :: Ast.Func Var -> Builder FillFunc
 declareFunc func@(Ast.Func name params _) = do
   fill <- Builder.declareFunc
     name
-    { arguments: map (const (S.NumType S.I32)) (NEA.toArray params)
-    , results: [ S.NumType S.I32 ]
+    { arguments: map (const i32) (NEA.toArray params)
+    , results: [ i32 ]
     }
   pure { fill, func }
 
 implFunc :: FillFunc -> Builder Unit
 implFunc { fill, func: Ast.Func _ params body } = do
-  let params' = foldlWithIndex (\ix xs name -> Map.insert name ix xs) Map.empty params
-  let initialScope = NEL.singleton params'
-  let paramTys = NEA.toArray (map (const (S.NumType S.I32)) params)
-  fnBody <- bodyBuild paramTys (compileExpr initialScope body)
+  let paramTys = NEA.toArray (map (\v -> Tuple v i32) params)
+  fnBody <- bodyBuild paramTys (compileExpr body)
   fill fnBody.locals fnBody.result
