@@ -56,7 +56,7 @@ main = do
     Right program -> do
       Console.log (Printer.printProgram identity program)
       let
-        renamed = Rename.renameProg program
+        renamed = Rename.renameProgram program
         bytes = Encode.encodeModule (Compiler.compileProgram renamed.result)
       writeToFile "playground/bytes.wasm" bytes case _ of
         Nothing ->

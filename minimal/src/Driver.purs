@@ -18,7 +18,7 @@ compileProgram input = do
   case Parser.parseProgram input of
     Left err -> unsafeCrashWith ("Failed to parse with: " <> show err)
     Right program -> do
-      let renamed = Rename.renameProg program
+      let renamed = Rename.renameProgram program
       Encode.encodeModule (Compiler.compileProgram renamed.result)
 
 renameProgram :: String -> String
@@ -26,5 +26,5 @@ renameProgram input =
   case Parser.parseProgram input of
     Left err -> unsafeCrashWith ("Failed to parse with: " <> show err)
     Right program -> do
-      let { result, nameMap } = Rename.renameProg program
+      let { result, nameMap } = Rename.renameProgram program
       Printer.printProgram (\v -> Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap)) result

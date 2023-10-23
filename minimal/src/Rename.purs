@@ -1,4 +1,4 @@
-module Rename (Var(..), printVar, renameProg, findFunc) where
+module Rename (Var(..), printVar, renameProgram, findFunc) where
 
 import Prelude
 
@@ -35,9 +35,9 @@ printVar = case _ of
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
 -- | Also returns a Map that maps every created identifier back to its original name
-renameProg :: Program String -> { nameMap :: Map Var String, result :: Program Var }
-renameProg prog = do
-  let (Tuple prog' s) = State.runState (renameProg' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
+renameProgram :: Program String -> { nameMap :: Map Var String, result :: Program Var }
+renameProgram prog = do
+  let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
   { result: prog', nameMap: s.nameMap }
 
 findFunc :: Map Var String -> String -> Var
@@ -84,8 +84,8 @@ withBlock f = do
   State.modify_ (_ { scope = oldScope })
   pure res
 
-renameProg' :: Program String -> Rename (Program Var)
-renameProg' prog = traverse renameToplevel prog
+renameProgram' :: Program String -> Rename (Program Var)
+renameProgram' prog = traverse renameToplevel prog
 
 renameToplevel :: Toplevel String -> Rename (Toplevel Var)
 renameToplevel = case _ of
