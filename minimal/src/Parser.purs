@@ -112,11 +112,12 @@ funcTy = ado
 
 topFunc :: Parser (Toplevel String)
 topFunc = ado
+  l.reserved "fn"
   name <- l.identifier
-  params <- many1 l.identifier
+  params <- l.parens (l.commaSep l.identifier)
   _ <- l.symbol "="
   body <- expr
-  in TopFunc { name, export: Just name, params, body }
+  in TopFunc { name, export: Just name, params: Array.fromFoldable params, body }
 
 topLet :: Parser (Toplevel String)
 topLet = ado

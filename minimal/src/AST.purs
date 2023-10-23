@@ -2,7 +2,6 @@ module Ast where
 
 import Prelude
 
-import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
@@ -48,7 +47,7 @@ isLetD = case _ of
 type Func a =
   { name :: a
   , export :: Maybe String
-  , params :: NonEmptyArray a
+  , params :: Array a
   , body :: Expr a
   }
 

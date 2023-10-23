@@ -42,10 +42,10 @@ import clear : (i32) -> i32 from clear_canvas
 let x = 0;
 let y = 500;
 
-tick _ = {
+fn tick() = {
   set x = x + 3;
   set y = if y > 100 { y - 4 } else { y };
-  draw_line 0 0 x y
+  draw_line(0, 0, x, y)
 }
 """
 

@@ -75,8 +75,8 @@ renderDecl showVar = case _ of
 
 renderFunc :: forall a name. (name -> String) -> Func name -> Doc a
 renderFunc showVar func = do
-  let headerD = text (showVar func.name)
-  let paramD = D.words (map (text <<< showVar) func.params)
+  let headerD = text "fn" <+> text (showVar func.name)
+  let paramD = parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (text <<< showVar) func.params))
   let bodyD = renderExpr showVar func.body
   headerD <+> paramD <+> text "=" <+> bodyD
 

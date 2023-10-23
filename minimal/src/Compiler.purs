@@ -5,7 +5,6 @@ import Prelude
 import Ast (Program)
 import Ast as Ast
 import Data.Array as Array
-import Data.Array.NonEmpty as NEA
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
@@ -142,13 +141,13 @@ declareFunc :: Ast.Func Var -> Builder FillFunc
 declareFunc func = do
   fill <- Builder.declareFunc
     func.name
-    { arguments: map (const i32) (NEA.toArray func.params)
+    { arguments: map (const i32) func.params
     , results: [ i32 ]
     }
   pure { fill, func }
 
 implFunc :: FillFunc -> Builder Unit
 implFunc { fill, func } = do
-  let paramTys = NEA.toArray (map (\v -> Tuple v i32) func.params)
+  let paramTys = map (\v -> Tuple v i32) func.params
   fnBody <- bodyBuild paramTys (compileExpr func.body)
   fill fnBody.locals fnBody.result
