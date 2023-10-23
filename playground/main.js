@@ -2,15 +2,31 @@ import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
 const program = `
 import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
-import clear : (i32) -> i32 from clear_canvas
+import clear : () -> i32 from clear_canvas
 
 let x = 0;
 let y = 500;
 
+fn max(x, y) =
+  if x > y {
+    x
+  } else {
+    y
+  }
+
+fn min(x, y) =
+  if x < y {
+    x
+  } else {
+    y
+  }
+
+fn clamp(lo, x, hi) = min(hi, max(lo, x))
+
 fn tick() = {
-  clear(0);
-  set x = x + 3;
-  set y = if y > 100 { y - 4 } else { y };
+  clear();
+  set x = clamp(0, x + 5, 500);
+  set y = clamp(0, y - 10, 500);
   draw_line(0, 0, x, y)
 }`;
 
