@@ -101,7 +101,7 @@ decl e =
       ExprD <$> e
 
 valTy :: Parser ValTy
-valTy = l.reserved "i32" $> I32
+valTy = l.reserved "i32" $> TyI32
 
 funcTy :: Parser FuncTy
 funcTy = ado
@@ -114,10 +114,17 @@ topFunc :: Parser (Toplevel String)
 topFunc = ado
   l.reserved "fn"
   name <- l.identifier
-  params <- l.parens (l.commaSep l.identifier)
+  params <- l.parens (l.commaSep param)
+  returnTy <- C.option TyUnit (l.symbol ":" *> valTy)
   _ <- l.symbol "="
   body <- expr
-  in TopFunc { name, export: Just name, params: Array.fromFoldable params, body }
+  in TopFunc { name, export: Just name, params: Array.fromFoldable params, returnTy, body }
+  where
+  param = ado
+    name <- l.identifier
+    _ <- l.symbol ":"
+    ty <- valTy
+    in { name, ty }
 
 topLet :: Parser (Toplevel String)
 topLet = ado

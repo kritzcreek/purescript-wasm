@@ -75,14 +75,24 @@ renderDecl showVar = case _ of
 
 renderFunc :: forall a name. (name -> String) -> Func name -> Doc a
 renderFunc showVar func = do
-  let headerD = text "fn" <+> text (showVar func.name)
-  let paramD = parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (text <<< showVar) func.params))
-  let bodyD = renderExpr showVar func.body
-  headerD <+> paramD <+> text "=" <+> bodyD
+  let
+    headerD = text "fn" <+> text (showVar func.name)
+    paramD =
+      parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderParam func.params))
+    returnTyD =
+      if func.returnTy /= TyUnit then
+        D.space <> text ":" <+> renderValTy func.returnTy
+      else
+        mempty
+    bodyD = renderExpr showVar func.body
+  (headerD <+> paramD <> returnTyD <+> text "=") </> indent bodyD
+  where
+  renderParam { name, ty } = text (showVar name) <+> text ":" <+> renderValTy ty
 
 renderValTy :: forall a. ValTy -> Doc a
 renderValTy = case _ of
-  I32 -> text "i32"
+  TyI32 -> text "i32"
+  TyUnit -> text "()"
 
 renderFuncTy :: forall a. FuncTy -> Doc a
 renderFuncTy = case _ of

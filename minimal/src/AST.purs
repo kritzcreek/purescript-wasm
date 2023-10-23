@@ -47,11 +47,25 @@ isLetD = case _ of
 type Func a =
   { name :: a
   , export :: Maybe String
-  , params :: Array a
+  , params :: Array { name :: a, ty :: ValTy }
+  , returnTy :: ValTy
   , body :: Expr a
   }
 
-data ValTy = I32
+data Toplevel a
+  = TopFunc (Func a)
+  | TopLet a (Expr a)
+  | TopImport a FuncTy String -- Name, Type, ExternalName
+
+derive instance Generic (Toplevel a) _
+instance Show a => Show (Toplevel a) where
+  show x = genericShow x
+
+type Program a = Array (Toplevel a)
+
+-- Types
+
+data ValTy = TyI32 | TyUnit
 
 derive instance Eq ValTy
 derive instance Generic ValTy _
@@ -65,14 +79,3 @@ derive instance Eq FuncTy
 derive instance Generic FuncTy _
 instance Show FuncTy where
   show x = genericShow x
-
-data Toplevel a
-  = TopFunc (Func a)
-  | TopLet a (Expr a)
-  | TopImport a FuncTy String -- Name, Type, ExternalName
-
-derive instance Generic (Toplevel a) _
-instance Show a => Show (Toplevel a) where
-  show x = genericShow x
-
-type Program a = Array (Toplevel a)

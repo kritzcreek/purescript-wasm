@@ -42,21 +42,21 @@ import clear : () -> i32 from clear_canvas
 let x = 0;
 let y = 500;
 
-fn max(x, y) =
+fn max(x : i32, y : i32) : i32 =
   if x > y {
     x
   } else {
     y
   }
 
-fn min(x, y) =
+fn min(x : i32, y : i32) : i32 =
   if x < y {
     x
   } else {
     y
   }
 
-fn clamp(lo, x, hi) = min(hi, max(lo, x))
+fn clamp(lo : i32, x : i32, hi : i32) : i32 = min(hi, max(lo, x))
 
 fn tick() = {
   clear();

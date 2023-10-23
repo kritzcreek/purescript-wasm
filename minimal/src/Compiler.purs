@@ -27,7 +27,8 @@ i32 = S.NumType S.I32
 
 convertValTy :: Ast.ValTy -> S.ValType
 convertValTy = case _ of
-  Ast.I32 -> i32
+  Ast.TyI32 -> i32
+  Ast.TyUnit -> i32
 
 convertFuncTy :: Ast.FuncTy -> S.FuncType
 convertFuncTy = case _ of
@@ -148,6 +149,6 @@ declareFunc func = do
 
 implFunc :: FillFunc -> Builder Unit
 implFunc { fill, func } = do
-  let paramTys = map (\v -> Tuple v i32) func.params
+  let paramTys = map (\v -> Tuple v.name (convertValTy v.ty)) func.params
   fnBody <- bodyBuild paramTys (compileExpr func.body)
   fill fnBody.locals fnBody.result

@@ -92,12 +92,12 @@ renameToplevel = case _ of
   TopImport name ty externalName -> do
     var <- mkVar FunctionV name
     pure (TopImport var ty externalName)
-  TopFunc { name, export, params, body } -> do
+  TopFunc { name, export, params, returnTy, body } -> do
     nameVar <- mkVar FunctionV name
     withBlock do
-      paramVars <- traverse (mkVar LocalV) params
+      paramVars <- traverse (\p -> map { name: _, ty: p.ty } (mkVar LocalV p.name)) params
       body' <- renameExpr body
-      pure (TopFunc { name: nameVar, export, params: paramVars, body: body' })
+      pure (TopFunc { name: nameVar, export, params: paramVars, returnTy, body: body' })
   TopLet name expr -> do
     expr' <- renameExpr expr
     var <- mkVar GlobalV name
