@@ -16,6 +16,7 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits as CU
 import Parsing as P
+import Parsing.Combinators as C
 import Parsing.Combinators.Array (many1)
 import Parsing.Expr (Assoc(..), Operator(..), buildExprParser)
 import Parsing.Language (javaStyle)
@@ -64,17 +65,19 @@ intLit = do
     Just n -> pure n
 
 expr1 :: Parser (Expr String) -> Parser (Expr String)
-expr1 e = block e <|> expr2 e
+expr1 e = block e <|> atom e
 
-expr2 :: Parser (Expr String) -> Parser (Expr String)
-expr2 e = do
-  atoms <- many1 (atom e)
-  pure (Array.foldl CallE (NEA.head atoms) (NEA.tail atoms))
+varOrCall :: Parser (Expr String) -> Parser (Expr String)
+varOrCall e = do
+  ident <- l.identifier
+  C.optionMaybe (l.parens (l.commaSep e)) >>= case _ of
+    Nothing -> pure (VarE ident)
+    Just args -> pure (CallE ident (Array.fromFoldable args))
 
 atom :: Parser (Expr String) -> Parser (Expr String)
 atom e =
   map LitE lit
-    <|> map VarE l.identifier
+    <|> varOrCall e
     <|> IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e)
     <|> l.parens e
 

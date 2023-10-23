@@ -24,7 +24,7 @@ data Expr a
   | VarE a
   | BinOpE Op (Expr a) (Expr a)
   | IfE (Expr a) (Expr a) (Expr a)
-  | CallE (Expr a) (Expr a)
+  | CallE a (Array (Expr a))
   | BlockE (Array (Decl a))
 
 derive instance genericExpr :: Generic (Expr a) _

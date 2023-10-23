@@ -118,10 +118,10 @@ renameExpr = case _ of
     t' <- renameExpr t
     e' <- renameExpr e
     pure (IfE c' t' e')
-  CallE f a -> do
-    f' <- renameExpr f
-    a' <- renameExpr a
-    pure (CallE f' a')
+  CallE fn args -> do
+    fn' <- lookupVar fn
+    args' <- traverse renameExpr args
+    pure (CallE fn' args')
   BlockE b -> withBlock do
     decls <- traverse renameDecl b
     pure (BlockE decls)

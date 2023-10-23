@@ -10,7 +10,6 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
-import Printer as Printer
 import Rename (Var(..))
 import Wasm.Syntax as S
 import WasmBuilder (bodyBuild)
@@ -101,25 +100,14 @@ compileExpr = case _ of
     t' <- compileExpr t
     e' <- compileExpr e
     in cond' <> [ S.If (S.BlockValType (Just (S.NumType S.I32))) t' e' ]
-  Ast.CallE func arg -> do
-    let
-      { fn, args } = case unfoldCall func [ arg ] of
-        Nothing -> unsafeCrashWith ("Can't unfold " <> Printer.printExpr show (Ast.CallE func arg))
-        Just r -> r
+  Ast.CallE fn args -> do
     args' <- traverse compileExpr args
-
     call <- Builder.liftBuilder do
       Builder.callImport fn >>= case _ of
         Just importCall -> pure importCall
         Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
   Ast.BlockE body -> compileBlock body
-
-unfoldCall :: forall a. Ast.Expr a -> Array (Ast.Expr a) -> Maybe { fn :: a, args :: Array (Ast.Expr a) }
-unfoldCall f args = case f of
-  Ast.VarE fn -> Just { fn, args }
-  Ast.CallE newF newArg -> unfoldCall newF ([ newArg ] <> args)
-  _ -> Nothing
 
 compileBlock
   :: Array (Ast.Decl Var)

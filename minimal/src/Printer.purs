@@ -59,8 +59,8 @@ renderExpr showVar = case _ of
       <+> renderExpr showVar t
       <+> text "else"
       <+> renderExpr showVar e
-  CallE func arg ->
-    renderExpr showVar func <+> renderExpr showVar arg
+  CallE func args ->
+    text (showVar func) <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr showVar) args))
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl showVar) body))
 
@@ -107,6 +107,12 @@ curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
   where
   open = text "{" <> break
   close = break <> text "}"
+
+parensIndent :: forall a. Doc a -> Doc a
+parensIndent = flexGroup <<< encloseEmptyAlt open close (text "()") <<< indent
+  where
+  open = text "(" <> D.softBreak
+  close = D.softBreak <> text ")"
 
 parens :: forall a. Doc a -> Doc a
 parens = encloseEmptyAlt (text "(") (text ")") (text "()")

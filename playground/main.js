@@ -8,10 +8,10 @@ let x = 0;
 let y = 500;
 
 tick _ = {
-  clear 0;
+  clear(0);
   set x = x + 3;
   set y = if y > 100 { y - 4 } else { y };
-  draw_line 0 0 x y
+  draw_line(0, 0, x, y)
 }`;
 
 let compiledWasm = compileProgram(program);
