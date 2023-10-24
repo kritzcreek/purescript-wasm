@@ -92,6 +92,7 @@ renderFunc showVar func = do
 renderValTy :: forall a. ValTy -> Doc a
 renderValTy = case _ of
   TyI32 -> text "i32"
+  TyBool -> text "bool"
   TyUnit -> text "()"
 
 renderFuncTy :: forall a. FuncTy -> Doc a

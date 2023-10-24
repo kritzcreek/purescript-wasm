@@ -101,13 +101,13 @@ decl e =
       ExprD <$> e
 
 valTy :: Parser ValTy
-valTy = l.reserved "i32" $> TyI32
+valTy = l.reserved "i32" $> TyI32 <|> l.reserved "bool" $> TyBool
 
 funcTy :: Parser FuncTy
 funcTy = ado
   arguments <- l.parens (l.commaSep valTy)
   l.symbol "->"
-  result <- valTy
+  result <- (l.reserved "()" $> TyUnit) <|> valTy
   in FuncTy (Array.fromFoldable arguments) result
 
 topFunc :: Parser (Toplevel String)

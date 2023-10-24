@@ -65,7 +65,7 @@ type Program a = Array (Toplevel a)
 
 -- Types
 
-data ValTy = TyI32 | TyUnit
+data ValTy = TyI32 | TyBool | TyUnit
 
 derive instance Eq ValTy
 derive instance Generic ValTy _

@@ -28,6 +28,7 @@ i32 = S.NumType S.I32
 convertValTy :: Ast.ValTy -> S.ValType
 convertValTy = case _ of
   Ast.TyI32 -> i32
+  Ast.TyBool -> i32
   Ast.TyUnit -> i32
 
 convertFuncTy :: Ast.FuncTy -> S.FuncType
