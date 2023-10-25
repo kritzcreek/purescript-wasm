@@ -8,7 +8,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.String as String
 
-data RefType = NullFuncRef | FuncRef | ExternRef
+data RefType = NullFuncRef | FuncRef | ExternRef | HeapTypeRef Boolean HeapType
 
 derive instance eqRefType :: Eq RefType
 derive instance ordRefType :: Ord RefType
@@ -17,6 +17,58 @@ instance showRefType :: Show RefType where
     NullFuncRef -> "nullfuncref"
     FuncRef -> "funcref"
     ExternRef -> "externref"
+    HeapTypeRef null ix -> "ref " <> if null then "null " else "" <> show ix
+
+data HeapType = IndexHt TypeIdx
+
+derive instance Eq HeapType
+derive instance Ord HeapType
+instance Show HeapType where
+  show = case _ of
+    IndexHt ix -> show ix
+
+data PackedType = I8 | I16
+
+derive instance Eq PackedType
+derive instance Ord PackedType
+instance Show PackedType where
+  show = case _ of
+    I8 -> "i8"
+    I16 -> "i16"
+
+data StorageType = StorageVal ValType | StoragePacked PackedType
+
+derive instance Eq StorageType
+derive instance Ord StorageType
+instance Show StorageType where
+  show = case _ of
+    StorageVal t -> show t
+    StoragePacked t -> show t
+
+type FieldType =
+  { mutability :: Mutability
+  , ty :: StorageType
+  }
+type StructType = Array FieldType
+type ArrayType = FieldType
+
+data CompositeType = CompFunc FuncType | CompStruct StructType | CompArray ArrayType
+
+derive instance Eq CompositeType
+derive instance Ord CompositeType
+instance Show CompositeType where
+  show = case _ of
+    CompFunc t -> show t
+    CompStruct t -> "{" <> show t <> "}"
+    CompArray t -> "[" <> show t <> "]"
+
+type RecType = Array SubType
+
+type SubType =
+  { final :: Boolean
+  , supertypes :: Array TypeIdx
+  , ty :: CompositeType
+  }
 
 data NumType = I32 | I64 | F32 | F64
 
@@ -58,7 +110,6 @@ type Expr = Array Instruction
 
 type MemArg = { offset :: Int, align :: Int }
 
--- TODO: Add Instructions for non-I32s as well as cvtops
 data Instruction
   = I32Const Int
   | I32Clz
@@ -298,6 +349,8 @@ type Memory =
 
 data Mutability = Const | Var
 
+derive instance Eq Mutability
+derive instance Ord Mutability
 instance showMutability :: Show Mutability where
   show = case _ of
     Const -> "const"
@@ -374,7 +427,7 @@ type Export =
   }
 
 type Module =
-  { types :: Array FuncType
+  { types :: Array RecType
   , funcs :: Array Func
   , tables :: Array Table
   , memories :: Array Memory
