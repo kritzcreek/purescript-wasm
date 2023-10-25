@@ -125,6 +125,9 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
   BlockE b -> withBlock do
     decls <- traverse renameDecl b
     pure (BlockE decls)
+  ArrayE els -> do
+    els' <- traverse renameExpr els
+    pure (ArrayE els')
 
 renameDecl
   :: forall note

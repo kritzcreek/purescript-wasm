@@ -83,6 +83,7 @@ atom e =
     <|> varOrCall e
     <|> map noNote (IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e))
     <|> l.parens e
+    <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep e))
 
 block :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 block e =

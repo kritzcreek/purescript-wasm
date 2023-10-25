@@ -90,6 +90,8 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
     renderOptions.renderName func <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
+  ArrayE elements ->
+    brackets (D.foldWithSeparator (text "," <> break) (map (renderExpr renderOptions) elements))
 
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of
@@ -122,6 +124,7 @@ renderValTy = case _ of
   TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
+  TyArray t -> text "[" <> renderValTy t <> text "]"
 
 renderFuncTy :: forall a. FuncTy -> Doc a
 renderFuncTy = case _ of
@@ -146,6 +149,12 @@ curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
   where
   open = text "{" <> break
   close = break <> text "}"
+
+brackets :: forall a. Doc a -> Doc a
+brackets = flexGroup <<< encloseEmptyAlt open close (text "[]") <<< indent
+  where
+  open = text "[" <> D.softBreak
+  close = D.softBreak <> text "]"
 
 parensIndent :: forall a. Doc a -> Doc a
 parensIndent = flexGroup <<< encloseEmptyAlt open close (text "()") <<< indent

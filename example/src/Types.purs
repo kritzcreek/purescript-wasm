@@ -9,7 +9,7 @@ import Data.Either as Either
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Traversable (traverse)
+import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
 
 data Ty
@@ -17,6 +17,7 @@ data Ty
   | TyF32
   | TyBool
   | TyUnit
+  | TyArray Ty
 
 showTy :: Ty -> String
 showTy = case _ of
@@ -24,6 +25,7 @@ showTy = case _ of
   TyF32 -> "f32"
   TyBool -> "bool"
   TyUnit -> "unit"
+  TyArray t -> "[" <> showTy t <> "]"
 
 instance Show Ty where
   show = showTy
@@ -34,6 +36,7 @@ convertTy = case _ of
   Ast.TyF32 -> TyF32
   Ast.TyBool -> TyBool
   Ast.TyUnit -> TyUnit
+  Ast.TyArray t -> TyArray (convertTy t)
 
 data FuncTy = FuncTy (Array Ty) Ty
 
@@ -132,6 +135,15 @@ inferExpr ctx expr = case expr.expr of
   Ast.BlockE decls -> do
     result <- inferDecls ctx decls
     pure { expr: Ast.BlockE result.decls, note: result.ty }
+  Ast.ArrayE elements -> do
+    elements' <- traverse (inferExpr ctx) elements
+    case Array.head elements' of
+      -- TODO: empty array requires bidirectional checking
+      Nothing -> pure { expr: Ast.ArrayE [], note: TyArray TyUnit }
+      Just el -> do
+        let tyEl = typeOf el
+        traverse_ (checkTy tyEl <<< typeOf) elements'
+        pure { expr: Ast.ArrayE elements', note: TyArray tyEl }
 
 inferDecls :: forall note. Ctx -> Array (Ast.Decl note String) -> Either String { ty :: Ty, decls :: Array TypedDecl }
 inferDecls initialCtx initialDecls = do

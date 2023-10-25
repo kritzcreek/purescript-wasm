@@ -41,6 +41,7 @@ typeOf e = case Types.typeOf e of
   Types.TyF32 -> f32
   Types.TyBool -> i32
   Types.TyUnit -> i32
+  Types.TyArray _ -> unsafeCrashWith "Can't produce a ValType for ArrayTy"
 
 convertValTy :: Ast.ValTy -> S.ValType
 convertValTy = case _ of
@@ -48,6 +49,7 @@ convertValTy = case _ of
   Ast.TyF32 -> f32
   Ast.TyBool -> i32
   Ast.TyUnit -> i32
+  Ast.TyArray _ -> unsafeCrashWith "Can't produce a ValType for ArrayTy"
 
 convertFuncTy :: Ast.FuncTy -> S.FuncType
 convertFuncTy = case _ of
@@ -143,6 +145,15 @@ compileExpr expr = case expr.expr of
         Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
   Ast.BlockE body -> compileBlock body
+  Ast.ArrayE elements -> do
+    let
+      elTy = case expr.note of
+        Types.TyArray t -> t
+        _ -> unsafeCrashWith "non-array type inferred for array literal"
+    compileArray elTy elements
+
+compileArray :: Types.Ty -> Array CExpr -> BodyBuilder S.Expr
+compileArray _elTy _elements = unsafeCrashWith "No codegen for arrays yet"
 
 compileBlock
   :: Array CDecl

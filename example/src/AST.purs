@@ -23,6 +23,7 @@ type Expr note name = { note :: note, expr :: Expr' note name }
 data Expr' note name
   = LitE Lit
   | VarE name
+  | ArrayE (Array (Expr note name))
   | BinOpE Op (Expr note name) (Expr note name)
   | IfE (Expr note name) (Expr note name) (Expr note name)
   | CallE name (Array (Expr note name))
@@ -67,7 +68,7 @@ type Program note name = Array (Toplevel note name)
 
 -- Types
 
-data ValTy = TyI32 | TyF32 | TyBool | TyUnit
+data ValTy = TyI32 | TyF32 | TyBool | TyUnit | TyArray ValTy
 
 derive instance Eq ValTy
 derive instance Generic ValTy _
