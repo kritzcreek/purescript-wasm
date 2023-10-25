@@ -6,7 +6,7 @@ import clear : () -> i32 from clear_canvas
 
 let x = 0.0;
 let y = 0.0;
-let vx = 13.5;
+let vx = 11.0;
 let vy = 10.0;
 
 fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
@@ -17,7 +17,6 @@ fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
 }
 
 fn tick(elapsed_time_ms : f32) = {
-  clear();
   let elapsed_factor = elapsed_time_ms / 32.0;
   set x = x + (vx * elapsed_factor);
   set y = y + (vy * elapsed_factor);
@@ -107,10 +106,7 @@ let tick = await initWasm()
 
 let previousTimeStamp;
 function render(timeStamp) {
-  if (previousTimeStamp === undefined) {
-    previousTimeStamp = timeStamp;
-  }
-  const elapsed = timeStamp - previousTimeStamp;
+  const elapsed = timeStamp - (previousTimeStamp ?? timeStamp);
   previousTimeStamp = timeStamp;
   tick(elapsed)
   requestAnimationFrame(render)
