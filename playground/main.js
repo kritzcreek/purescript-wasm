@@ -1,33 +1,50 @@
 import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
 const program = `
-import draw_line : (i32, f32, i32, f32) -> i32 from draw_line
+import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
-let x = 0;
-let y = 500.0;
+let x = 0.0;
+let y = 0.0;
+let vx = 13.5;
+let vy = 10.0;
 
-fn max(x : i32, y : i32) : i32 =
-  if x > y {
-    x
-  } else {
-    y
-  }
+fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
+  draw_line(x, y, x + size, y);
+  draw_line(x, y, x, y + size);
+  draw_line(x + size, y + size, x, y + size);
+  draw_line(x + size, y + size, x + size, y)
+}
 
-fn min(x : i32, y : i32) : i32 =
-  if x < y {
-    x
-  } else {
-    y
-  }
-
-fn clamp(lo : i32, x : i32, hi : i32) : i32 = min(hi, max(lo, x))
-
-fn tick() = {
+fn tick(elapsed_time_ms : f32) = {
   clear();
-  set x = clamp(0, x + 5, 500);
-  set y = if y < 10.0 { y } else { y - 10.0 };
-  draw_line(0, 0.0, x, y)
+  let elapsed_factor = elapsed_time_ms / 32.0;
+  set x = x + (vx * elapsed_factor);
+  set y = y + (vy * elapsed_factor);
+
+  if x < 0.0 {
+    set x = 0.0;
+    set vx = 0.0 - vx;
+    0
+  } else {0};
+  if x > 500.0 {
+    set x = 500.0;
+    set vx = 0.0 - vx;
+    0
+  } else {0};
+
+  if y < 0.0 {
+    set y = 0.0;
+    set vy = 0.0 - vy;
+    0
+  } else {0};
+  if y > 500.0 {
+    set y = 500.0;
+    set vy = 0.0 - vy;
+    0
+  } else {0};
+
+  draw_cube(x, y, 20.0)
 }
 `.trim();
 
@@ -80,12 +97,23 @@ async function initWasm() {
   }
   // const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), imports)
   const obj = await WebAssembly.instantiate(compiledWasm, imports)
-  return () => {
-    obj.instance.exports.tick()
+  return (elapsed) => {
+    obj.instance.exports.tick(elapsed)
   }
 }
 
 document.getElementById("output").innerText = renamed
 let tick = await initWasm()
 
-setInterval(() => tick(), 100)
+let previousTimeStamp;
+function render(timeStamp) {
+  if (previousTimeStamp === undefined) {
+    previousTimeStamp = timeStamp;
+  }
+  const elapsed = timeStamp - previousTimeStamp;
+  previousTimeStamp = timeStamp;
+  tick(elapsed)
+  requestAnimationFrame(render)
+}
+
+requestAnimationFrame(render)
