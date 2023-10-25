@@ -3,13 +3,12 @@
   "type": "module",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "build": "spago build -p minimal",
-    "start": "spago run -p minimal",
-    "format": "purs-tidy format-in-place src example minimal",
+    "build": "spago build -p example",
+    "start": "spago run -p example",
+    "format": "purs-tidy format-in-place src example",
     "play": "echo 'Open the browser at http://127.0.0.1:8080/playground' && live-server . --open=/playground",
-    "pscid": "pscid -I \"lib;minimal\" --test",
+    "pscid": "pscid -I \"lib;example\" --test",
     "pscid:test": "npm start; exit 1"
   },
   "author": "",

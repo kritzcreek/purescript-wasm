@@ -6,11 +6,15 @@ module WasmBuilder
   , build
   , build'
   , callFunc
+  , callImport
   , declareExport
   , declareFunc
   , declareGlobal
+  , declareImport
+  , lookupGlobal
   , declareType
   , newLocal
+  , getLocal
   , liftBuilder
   ) where
 
@@ -19,6 +23,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
@@ -34,7 +39,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Instruction(..), LocalIdx, Memory, Module, Name, TypeIdx, ValType, emptyModule)
+import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, TypeIdx, ValType, emptyModule)
 
 -- - Define functions
 -- - Define globals
@@ -57,6 +62,8 @@ type GlobalData =
   , init :: Expr
   }
 
+type ImportData = { index :: FuncIdx, tyIdx :: TypeIdx, ns :: String, func :: String }
+
 type Env name =
   { funcs :: Ref (Map name FuncData)
   , funcsSupply :: Ref Int
@@ -64,11 +71,13 @@ type Env name =
   , globalsSupply :: Ref Int
   , types :: Ref (Array FuncType)
   , memory :: Ref (Maybe Memory)
+  , imports :: Ref (Map name ImportData)
   , exports :: Ref (Array Export)
   }
 
 initialEnv :: forall name. Effect (Env name)
 initialEnv = ado
+  imports <- Ref.new Map.empty
   funcs <- Ref.new Map.empty
   funcsSupply <- Ref.new (-1)
   globals <- Ref.new Map.empty
@@ -76,7 +85,7 @@ initialEnv = ado
   types <- Ref.new []
   memory <- Ref.new Nothing
   exports <- Ref.new []
-  in { funcs, funcsSupply, globals, globalsSupply, types, memory, exports }
+  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -104,6 +113,29 @@ nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
   mkBuilder \{ globalsSupply } -> Ref.modify (_ + 1) globalsSupply
 
+declareImport
+  :: forall name
+   . Ord name
+  => name
+  -> String
+  -> String
+  -> TypeIdx
+  -> Builder name Unit
+declareImport name ns func tyIdx = do
+  index <- nextFuncIdx
+  mkBuilder \{ imports } -> do
+    Ref.modify_ (Map.insert name { index, tyIdx, ns, func }) imports
+
+lookupFuncImport :: forall name. Show name => Ord name => name -> Builder name (Maybe FuncIdx)
+lookupFuncImport name =
+  mkBuilder \{ imports } -> do
+    fs <- Ref.read imports
+    pure (map _.index (Map.lookup name fs))
+
+callImport :: forall name. Show name => Ord name => name -> Builder name (Maybe Instruction)
+callImport name =
+  map (map Call) (lookupFuncImport name)
+
 declareGlobal
   :: forall name
    . Show name
@@ -120,6 +152,19 @@ declareGlobal name ty init = do
       throw ("double declaring global: " <> show name)
     Ref.modify_ (Map.insert name { index, type: ty, init }) globals
     pure index
+
+lookupGlobal
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> Builder name GlobalIdx
+lookupGlobal name = do
+  mkBuilder \{ globals } -> do
+    gs <- Ref.read globals
+    case Map.lookup name gs of
+      Nothing -> throw ("undeclared global: " <> show name)
+      Just { index } -> pure index
 
 nextFuncIdx :: forall name. Builder name FuncIdx
 nextFuncIdx =
@@ -199,6 +244,15 @@ buildGlobals { globals } = do
   let sortedGlobals = Array.sortWith (_.index <<< Tuple.snd) gs
   pure (map (Record.delete (Proxy :: _ "index") <<< Tuple.snd) sortedGlobals)
 
+buildImports
+  :: forall name
+   . Env name
+  -> Effect (Array Import)
+buildImports { imports } = do
+  is <- map Map.toUnfoldable (Ref.read imports)
+  let sortedFuncImports = Array.sortWith (_.index <<< Tuple.snd) is
+  pure (map (\(Tuple _ importData) -> { module: importData.ns, name: importData.func, desc: ImportFunc importData.tyIdx }) sortedFuncImports)
+
 buildModule
   :: forall name
    . Show name
@@ -207,6 +261,7 @@ buildModule
 buildModule env@{ types, memory, exports } = do
   ts <- Ref.read types
   wasmGlobals <- buildGlobals env
+  imps <- buildImports env
   mem <- Ref.read memory
   exps <- Ref.read exports
   buildFuncs env <#> case _ of
@@ -220,6 +275,7 @@ buildModule env@{ types, memory, exports } = do
             , types = ts
             , memories = Array.fromFoldable mem
             , exports = exps
+            , imports = imps
             }
         )
 
@@ -234,14 +290,11 @@ build' b = case build b of
   Right m -> m
   Left err -> unsafeCrashWith (show err)
 
-type LocalData = { index :: LocalIdx, type :: ValType }
+type LocalData = { index :: LocalIdx, ty :: ValType }
 
-type BodyEnv =
-  { params :: Array ValType
-  , locals :: Ref (Array ValType)
-  }
+type BodyEnv name = { locals :: Ref (Map name LocalData) }
 
-newtype BodyBuilder name a = BodyBuilder (ReaderT BodyEnv (Builder name) a)
+newtype BodyBuilder name a = BodyBuilder (ReaderT (BodyEnv name) (Builder name) a)
 
 derive newtype instance Functor (BodyBuilder name)
 derive newtype instance Apply (BodyBuilder name)
@@ -249,40 +302,63 @@ derive newtype instance Applicative (BodyBuilder name)
 derive newtype instance Bind (BodyBuilder name)
 derive newtype instance Monad (BodyBuilder name)
 
-initialBodyEnv :: Array ValType -> Effect BodyEnv
+initialBodyEnv :: forall name. Ord name => Array (Tuple name ValType) -> Effect (BodyEnv name)
 initialBodyEnv params = ado
-  locals <- Ref.new []
-  in { params, locals }
+  locals <- Ref.new (Map.fromFoldable (Array.mapWithIndex (\index (Tuple name ty) -> Tuple name { index, ty }) params))
+  in { locals }
 
 nextLocalIdx :: forall name. BodyBuilder name LocalIdx
 nextLocalIdx =
-  mkBodyBuilder \{ params, locals } -> liftEffect ado
-    localCount <- map Array.length (Ref.read locals)
-    in localCount + Array.length params
+  mkBodyBuilder \{ locals } -> liftEffect (map Map.size (Ref.read locals))
 
-mkBodyBuilder :: forall name a. (BodyEnv -> Builder name a) -> BodyBuilder name a
+mkBodyBuilder :: forall name a. (BodyEnv name -> Builder name a) -> BodyBuilder name a
 mkBodyBuilder act = BodyBuilder (ReaderT act)
 
 bodyBuild
   :: forall name a
-   . Array ValType
+   . Ord name
+  => Array (Tuple name ValType)
   -> BodyBuilder name a
   -> Builder name { result :: a, locals :: Array ValType }
 bodyBuild params (BodyBuilder b) = do
   env <- liftEffect (initialBodyEnv params)
   result <- runReaderT b env
-  locals <- liftEffect (Ref.read env.locals)
+  ls <- liftEffect (Ref.read env.locals)
+  let
+    paramCount = Array.length params
+    locals =
+      Map.values ls
+        -- remove all params
+        # List.mapMaybe (\local -> if local.index >= paramCount then Just local else Nothing)
+        # Array.fromFoldable
+        # Array.sortWith _.index
+        # map _.ty
   pure { result, locals }
 
 newLocal
   :: forall name
-   . ValType
+   . Ord name
+  => name
+  -> ValType
   -> BodyBuilder name LocalIdx
-newLocal ty = do
+newLocal name ty = do
   index <- nextLocalIdx
   mkBodyBuilder \{ locals } -> liftEffect do
-    Ref.modify_ (\l -> Array.snoc l ty) locals
+    Ref.modify_ (Map.insert name { index, ty }) locals
     pure index
+
+getLocal
+  :: forall name
+   . Show name
+  => Ord name
+  => name
+  -> BodyBuilder name LocalIdx
+getLocal name = do
+  mkBodyBuilder \{ locals } -> liftEffect do
+    ls <- Ref.read locals
+    case Map.lookup name ls of
+      Nothing -> throw ("undeclared global: " <> show name)
+      Just { index } -> pure index
 
 liftBuilder :: forall name a. Builder name a -> BodyBuilder name a
 liftBuilder b = mkBodyBuilder (\_ -> b)

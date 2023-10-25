@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-import * as cp from 'node:child_process'
 
 export function writeToFileImpl(path, buf, cb) {
   fs.writeFile(path, buf, cb);
@@ -16,12 +15,3 @@ export function runWasmImpl(file) {
     });
   });
 };
-
-
-export function printWasmImpl(file) {
-  let res = cp.spawnSync("wasm-tools", ["print", file]);
-  console.log("Out\n", res.stdout.toString())
-  if (res.stderr.toString() !== "") {
-    console.log("Err\n", res.stderr.toString())
-  }
-}
