@@ -67,6 +67,8 @@ renderLit :: forall a. Lit -> Doc a
 renderLit = case _ of
   IntLit x ->
     text (show x)
+  FloatLit x ->
+    text (show x)
   BoolLit x ->
     text (show x)
 
@@ -117,6 +119,7 @@ renderFunc renderOptions func = do
 renderValTy :: forall a. ValTy -> Doc a
 renderValTy = case _ of
   TyI32 -> text "i32"
+  TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
 

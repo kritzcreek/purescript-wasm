@@ -14,12 +14,14 @@ import Data.Tuple (Tuple(..))
 
 data Ty
   = TyI32
+  | TyF32
   | TyBool
   | TyUnit
 
 showTy :: Ty -> String
 showTy = case _ of
   TyI32 -> "i32"
+  TyF32 -> "f32"
   TyBool -> "bool"
   TyUnit -> "unit"
 
@@ -29,6 +31,7 @@ instance Show Ty where
 convertTy :: Ast.ValTy -> Ty
 convertTy = case _ of
   Ast.TyI32 -> TyI32
+  Ast.TyF32 -> TyF32
   Ast.TyBool -> TyBool
   Ast.TyUnit -> TyUnit
 
@@ -51,26 +54,33 @@ addVal v t ctx = ctx { vals = Map.insert v t ctx.vals }
 lookupVal :: String -> Ctx -> Either String Ty
 lookupVal v ctx = Either.note ("Unknown variable: " <> v) (Map.lookup v ctx.vals)
 
-typeOf :: TypedExpr -> Ty
+typeOf :: forall name. Ast.Expr Ty name -> Ty
 typeOf e = e.note
 
 checkTy :: Ty -> Ty -> Either String Unit
 checkTy = case _, _ of
   TyI32, TyI32 -> pure unit
+  TyF32, TyF32 -> pure unit
   TyBool, TyBool -> pure unit
   TyUnit, TyUnit -> pure unit
   expected, actual -> Left ("Expected " <> show expected <> ", but got " <> show actual)
 
+checkTyNum :: Ty -> Either String Unit
+checkTyNum = case _ of
+  TyF32 -> pure unit
+  TyI32 -> pure unit
+  t -> Left ("Expected a numeric type but got: " <> show t)
+
 checkNumericOperator :: Ty -> Ty -> Either String Ty
 checkNumericOperator tyL tyR = do
-  checkTy TyI32 tyL
-  checkTy TyI32 tyR
-  pure TyI32
+  checkTyNum tyL
+  checkTy tyL tyR
+  pure tyL
 
 checkComparisonOperator :: Ty -> Ty -> Either String Ty
 checkComparisonOperator tyL tyR = do
-  checkTy TyI32 tyL
-  checkTy TyI32 tyR
+  checkTyNum tyL
+  checkTy tyL tyR
   pure TyBool
 
 inferExpr :: forall note. Ctx -> Ast.Expr note String -> Either String TypedExpr
@@ -152,6 +162,7 @@ inferDecls initialCtx initialDecls = do
 inferLit :: Ast.Lit -> Ty
 inferLit = case _ of
   Ast.IntLit _ -> TyI32
+  Ast.FloatLit _ -> TyF32
   Ast.BoolLit _ -> TyBool
 
 topFuncTy :: forall note. Ast.Toplevel note String -> Maybe (Tuple String FuncTy)

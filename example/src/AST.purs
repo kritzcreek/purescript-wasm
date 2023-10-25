@@ -12,7 +12,7 @@ derive instance genericOp :: Generic Op _
 instance showOp :: Show Op where
   show x = genericShow x
 
-data Lit = IntLit Int | BoolLit Boolean
+data Lit = IntLit Int | BoolLit Boolean | FloatLit Number
 
 derive instance Generic Lit _
 instance Show Lit where
@@ -67,7 +67,7 @@ type Program note name = Array (Toplevel note name)
 
 -- Types
 
-data ValTy = TyI32 | TyBool | TyUnit
+data ValTy = TyI32 | TyF32 | TyBool | TyUnit
 
 derive instance Eq ValTy
 derive instance Generic ValTy _

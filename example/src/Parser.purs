@@ -88,8 +88,17 @@ block :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 block e =
   noNote <<< BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep (decl e))
 
+foreign import parseFloat :: String -> Number
+
+numberLit :: Parser Lit
+numberLit = do
+  i <- intLit
+  C.optionMaybe (l.symbol "." *> intLit) >>= case _ of
+    Nothing -> pure (IntLit i)
+    Just c -> pure (FloatLit (parseFloat (show i <> "." <> show c)))
+
 lit :: Parser Lit
-lit = map IntLit intLit
+lit = numberLit
   <|> l.reserved "true" $> BoolLit true
   <|> l.reserved "false" $> BoolLit true
 
@@ -104,7 +113,10 @@ decl e =
       ExprD <$> e
 
 valTy :: Parser ValTy
-valTy = l.reserved "i32" $> TyI32 <|> l.reserved "bool" $> TyBool
+valTy =
+  l.reserved "i32" $> TyI32
+    <|> l.reserved "f32" $> TyF32
+    <|> l.reserved "bool" $> TyBool
 
 funcTy :: Parser FuncTy
 funcTy = ado
