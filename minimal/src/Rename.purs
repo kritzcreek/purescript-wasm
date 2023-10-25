@@ -2,7 +2,7 @@ module Rename (Var(..), printVar, renameProgram, findFunc) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Program, Toplevel(..))
+import Ast (Decl(..), Expr, Expr'(..), Program, Toplevel(..))
 import Control.Monad.State (State)
 import Control.Monad.State as State
 import Data.Array as Array
@@ -35,7 +35,7 @@ printVar = case _ of
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
 -- | Also returns a Map that maps every created identifier back to its original name
-renameProgram :: Program String -> { nameMap :: Map Var String, result :: Program Var }
+renameProgram :: forall note. Program note String -> { nameMap :: Map Var String, result :: Program note Var }
 renameProgram prog = do
   let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
   { result: prog', nameMap: s.nameMap }
@@ -84,10 +84,10 @@ withBlock f = do
   State.modify_ (_ { scope = oldScope })
   pure res
 
-renameProgram' :: Program String -> Rename (Program Var)
+renameProgram' :: forall note. Program note String -> Rename (Program note Var)
 renameProgram' prog = traverse renameToplevel prog
 
-renameToplevel :: Toplevel String -> Rename (Toplevel Var)
+renameToplevel :: forall note. Toplevel note String -> Rename (Toplevel note Var)
 renameToplevel = case _ of
   TopImport name ty externalName -> do
     var <- mkVar FunctionV name
@@ -103,8 +103,8 @@ renameToplevel = case _ of
     var <- mkVar GlobalV name
     pure (TopLet var expr')
 
-renameExpr :: Expr String -> Rename (Expr Var)
-renameExpr = case _ of
+renameExpr :: forall note. Expr note String -> Rename (Expr note Var)
+renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
   LitE lit -> pure (LitE lit)
   VarE v -> do
     var <- lookupVar v
@@ -127,8 +127,9 @@ renameExpr = case _ of
     pure (BlockE decls)
 
 renameDecl
-  :: Decl String
-  -> Rename (Decl Var)
+  :: forall note
+   . Decl note String
+  -> Rename (Decl note Var)
 renameDecl = case _ of
   LetD binder expr -> do
     expr' <- renameExpr expr

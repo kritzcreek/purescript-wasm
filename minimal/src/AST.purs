@@ -18,50 +18,52 @@ derive instance Generic Lit _
 instance Show Lit where
   show x = genericShow x
 
-data Expr a
+type Expr note name = { note :: note, expr :: Expr' note name }
+
+data Expr' note name
   = LitE Lit
-  | VarE a
-  | BinOpE Op (Expr a) (Expr a)
-  | IfE (Expr a) (Expr a) (Expr a)
-  | CallE a (Array (Expr a))
-  | BlockE (Array (Decl a))
+  | VarE name
+  | BinOpE Op (Expr note name) (Expr note name)
+  | IfE (Expr note name) (Expr note name) (Expr note name)
+  | CallE name (Array (Expr note name))
+  | BlockE (Array (Decl note name))
 
-derive instance genericExpr :: Generic (Expr a) _
-instance showExpr :: Show a => Show (Expr a) where
+derive instance genericExpr :: Generic (Expr' note a) _
+instance showExpr :: (Show note, Show a) => Show (Expr' note a) where
   show x = genericShow x
 
-data Decl a
-  = LetD a (Expr a)
-  | SetD a (Expr a)
-  | ExprD (Expr a)
+data Decl note name
+  = LetD name (Expr note name)
+  | SetD name (Expr note name)
+  | ExprD (Expr note name)
 
-derive instance genericDecl :: Generic (Decl a) _
-instance showDecl :: Show a => Show (Decl a) where
+derive instance genericDecl :: Generic (Decl note name) _
+instance showDecl :: (Show note, Show name) => Show (Decl note name) where
   show x = genericShow x
 
-isLetD :: forall a. Decl a -> Boolean
+isLetD :: forall note name. Decl note name -> Boolean
 isLetD = case _ of
   LetD _ _ -> true
   _ -> false
 
-type Func a =
-  { name :: a
+type Func note name =
+  { name :: name
   , export :: Maybe String
-  , params :: Array { name :: a, ty :: ValTy }
+  , params :: Array { name :: name, ty :: ValTy }
   , returnTy :: ValTy
-  , body :: Expr a
+  , body :: Expr note name
   }
 
-data Toplevel a
-  = TopFunc (Func a)
-  | TopLet a (Expr a)
-  | TopImport a FuncTy String -- Name, Type, ExternalName
+data Toplevel note name
+  = TopFunc (Func note name)
+  | TopLet name (Expr note name)
+  | TopImport name FuncTy String -- Name, Type, ExternalName
 
-derive instance Generic (Toplevel a) _
-instance Show a => Show (Toplevel a) where
+derive instance Generic (Toplevel note name) _
+instance (Show note, Show name) => Show (Toplevel note name) where
   show x = genericShow x
 
-type Program a = Array (Toplevel a)
+type Program note name = Array (Toplevel note name)
 
 -- Types
 

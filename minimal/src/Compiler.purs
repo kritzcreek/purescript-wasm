@@ -2,7 +2,6 @@ module Compiler (compileProgram) where
 
 import Prelude
 
-import Ast (Program)
 import Ast as Ast
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
@@ -10,6 +9,7 @@ import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Rename (Var(..))
+import Types as Types
 import Wasm.Syntax as S
 import WasmBuilder (bodyBuild)
 import WasmBuilder as Builder
@@ -17,9 +17,16 @@ import WasmBuilder as Builder
 type Builder = Builder.Builder Var
 type BodyBuilder = Builder.BodyBuilder Var
 
+type CFunc = Ast.Func Types.Ty Var
+type CExpr = Ast.Expr Types.Ty Var
+type CDecl = Ast.Decl Types.Ty Var
+type CToplevel = Ast.Toplevel Types.Ty Var
+
+type CProgram = Ast.Program Types.Ty Var
+
 type FillFunc =
   { fill :: Array S.ValType -> S.Expr -> Builder Unit
-  , func :: Ast.Func Var
+  , func :: CFunc
   }
 
 i32 :: S.ValType
@@ -38,12 +45,12 @@ convertFuncTy = case _ of
     , results: [ convertValTy result ]
     }
 
-compileProgram :: Program Var -> S.Module
+compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
   traverse_ implFunc (Array.catMaybes fills)
 
-declareToplevel :: Ast.Toplevel Var -> Builder (Maybe FillFunc)
+declareToplevel :: CToplevel -> Builder (Maybe FillFunc)
 declareToplevel = case _ of
   Ast.TopLet name init -> do
     _ <- Builder.declareGlobal name { mutability: S.Var, type: (S.NumType S.I32) } (compileConst init)
@@ -59,8 +66,8 @@ declareToplevel = case _ of
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
 
-compileConst :: forall a. Ast.Expr a -> S.Expr
-compileConst = unsafePartial case _ of
+compileConst :: forall a b. Ast.Expr a b -> S.Expr
+compileConst e = unsafePartial case e.expr of
   Ast.LitE (Ast.IntLit x) -> [ S.I32Const x ]
 
 compileOp :: Ast.Op -> S.Instruction
@@ -75,13 +82,13 @@ compileOp = case _ of
   Ast.Gte -> S.I32Ge_s
   Ast.Eq -> S.I32Eq
 
-compileLit :: Ast.Lit -> Array S.Instruction
+compileLit :: Ast.Lit -> S.Expr
 compileLit = case _ of
   Ast.IntLit x -> [ S.I32Const x ]
   Ast.BoolLit b -> [ if b then S.I32Const 1 else S.I32Const 0 ]
 
-compileExpr :: Ast.Expr Var -> BodyBuilder (Array S.Instruction)
-compileExpr = case _ of
+compileExpr :: CExpr -> BodyBuilder S.Expr
+compileExpr expr = case expr.expr of
   Ast.LitE lit -> pure (compileLit lit)
   Ast.VarE x -> case x of
     GlobalV _ -> do
@@ -111,8 +118,8 @@ compileExpr = case _ of
   Ast.BlockE body -> compileBlock body
 
 compileBlock
-  :: Array (Ast.Decl Var)
-  -> BodyBuilder (Array S.Instruction)
+  :: Array CDecl
+  -> BodyBuilder S.Expr
 compileBlock decls = do
   case Array.unsnoc decls of
     Just { init, last: Ast.ExprD expr } -> do
@@ -122,7 +129,7 @@ compileBlock decls = do
     _ ->
       unsafeCrashWith "block must end in an expression."
   where
-  go :: Ast.Decl Var -> BodyBuilder S.Expr
+  go :: CDecl -> BodyBuilder S.Expr
   go = case _ of
     Ast.ExprD expr -> do
       is <- compileExpr expr
@@ -139,7 +146,7 @@ compileBlock decls = do
           pure (is <> [ S.GlobalSet ix ])
         _ -> unsafeCrashWith "Unknown set target"
 
-declareFunc :: Ast.Func Var -> Builder FillFunc
+declareFunc :: CFunc -> Builder FillFunc
 declareFunc func = do
   fill <- Builder.declareFunc
     func.name

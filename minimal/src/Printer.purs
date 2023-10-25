@@ -1,30 +1,55 @@
-module Printer (printFuncs, printProgram, printExpr, printDecl) where
+module Printer (printFuncs, printProgram, printExpr, printDecl, renderAll, renderNone) where
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), Func, FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Data.Array as Array
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe as Maybe
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
+import Rename as Rename
+import Types as Types
+
+type RenderOptions note name a =
+  { renderNote :: note -> Doc a -> Doc a
+  , renderName :: name -> Doc a
+  }
+
+renderTyNote :: forall a. Types.Ty -> Doc a -> Doc a
+renderTyNote ty doc = parens (doc <+> text ":" <+> text (Types.showTy ty))
+
+renderAll :: forall a. Map Rename.Var String -> RenderOptions Types.Ty Rename.Var a
+renderAll nameMap =
+  { renderNote: renderTyNote
+  , renderName: \v -> text (Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap))
+  }
+
+renderNone :: forall a note name. Show name => RenderOptions note name a
+renderNone =
+  { renderNote: \_ doc -> doc
+  , renderName: text <<< show
+  }
 
 print' :: forall a. Doc a -> String
 print' = print plainText twoSpaces
 
-printProgram :: forall a. (a -> String) -> Program a -> String
-printProgram showVar toplevels =
-  print' (Array.intercalate (break <> break) (map (renderToplevel showVar) toplevels))
+printProgram :: forall note name a. RenderOptions note name a -> Program note name -> String
+printProgram renderOptions toplevels =
+  print' (Array.intercalate (break <> break) (map (renderToplevel renderOptions) toplevels))
 
-printFuncs :: forall a. (a -> String) -> Array (Func a) -> String
-printFuncs showVar funcs =
-  print' (Array.intercalate (break <> break) (map (renderFunc showVar) funcs))
+printFuncs :: forall note name a. RenderOptions note name a -> Array (Func note name) -> String
+printFuncs renderOptions funcs =
+  print' (Array.intercalate (break <> break) (map (renderFunc renderOptions) funcs))
 
-printExpr :: forall a. (a -> String) -> Expr a -> String
-printExpr showVar expr =
-  print' (renderExpr showVar expr)
+printExpr :: forall note name a. RenderOptions note name a -> Expr note name -> String
+printExpr renderOptions expr =
+  print' (renderExpr renderOptions expr)
 
-printDecl :: forall a. (a -> String) -> Decl a -> String
-printDecl showVar decl =
-  print' (renderDecl showVar decl)
+printDecl :: forall note name a. RenderOptions note name a -> Decl note name -> String
+printDecl renderOptions decl =
+  print' (renderDecl renderOptions decl)
 
 renderOp :: forall a. Op -> Doc a
 renderOp = text <<< case _ of
@@ -46,37 +71,37 @@ renderLit = case _ of
     text (show x)
 
 -- TODO: Prec based parenthesis
-renderExpr :: forall a name. (name -> String) -> Expr name -> Doc a
-renderExpr showVar = case _ of
+renderExpr :: forall a note name. RenderOptions note name a -> Expr note name -> Doc a
+renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.expr of
   LitE lit ->
     renderLit lit
   VarE v ->
-    text (showVar v)
+    renderOptions.renderName v
   BinOpE op l r ->
-    renderExpr showVar l <+> renderOp op <+> renderExpr showVar r
+    renderExpr renderOptions l <+> renderOp op <+> renderExpr renderOptions r
   IfE cond t e ->
-    text "if" <+> renderExpr showVar cond
-      <+> renderExpr showVar t
+    text "if" <+> renderExpr renderOptions cond
+      <+> renderExpr renderOptions t
       <+> text "else"
-      <+> renderExpr showVar e
+      <+> renderExpr renderOptions e
   CallE func args ->
-    text (showVar func) <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr showVar) args))
+    renderOptions.renderName func <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
   BlockE body ->
-    curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl showVar) body))
+    curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
 
-renderDecl :: forall a name. (name -> String) -> Decl name -> Doc a
-renderDecl showVar = case _ of
+renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
+renderDecl renderOptions = case _ of
   LetD name expr ->
-    (text "let" <+> text (showVar name) <+> text "=") </> renderExpr showVar expr
+    (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
   SetD name expr ->
-    (text "set" <+> text (showVar name) <+> text "=") </> renderExpr showVar expr
+    (text "set" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
   ExprD expr ->
-    renderExpr showVar expr
+    renderExpr renderOptions expr
 
-renderFunc :: forall a name. (name -> String) -> Func name -> Doc a
-renderFunc showVar func = do
+renderFunc :: forall a note name. RenderOptions note name a -> Func note name -> Doc a
+renderFunc renderOptions func = do
   let
-    headerD = text "fn" <+> text (showVar func.name)
+    headerD = text "fn" <+> renderOptions.renderName func.name
     paramD =
       parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderParam func.params))
     returnTyD =
@@ -84,10 +109,10 @@ renderFunc showVar func = do
         D.space <> text ":" <+> renderValTy func.returnTy
       else
         mempty
-    bodyD = renderExpr showVar func.body
+    bodyD = renderExpr renderOptions func.body
   (headerD <+> paramD <> returnTyD <+> text "=") </> indent bodyD
   where
-  renderParam { name, ty } = text (showVar name) <+> text ":" <+> renderValTy ty
+  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderValTy ty
 
 renderValTy :: forall a. ValTy -> Doc a
 renderValTy = case _ of
@@ -100,14 +125,14 @@ renderFuncTy = case _ of
   FuncTy arguments result ->
     parens (D.foldWithSeparator (text "," <> D.space) (map renderValTy arguments)) <+> text "->" <+> renderValTy result
 
-renderToplevel :: forall a name. (name -> String) -> Toplevel name -> Doc a
-renderToplevel showVar = case _ of
-  TopFunc func -> renderFunc showVar func
+renderToplevel :: forall a note name. RenderOptions note name a -> Toplevel note name -> Doc a
+renderToplevel renderOptions = case _ of
+  TopFunc func -> renderFunc renderOptions func
   TopLet name init ->
-    (text "let" <+> text (showVar name) <+> text "=") </> renderExpr showVar init <> text ";"
+    (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions init <> text ";"
   TopImport name ty externalName ->
     text "import"
-      <+> text (showVar name)
+      <+> renderOptions.renderName name
       <+> text ":"
       <+> renderFuncTy ty
       <+> text "from"

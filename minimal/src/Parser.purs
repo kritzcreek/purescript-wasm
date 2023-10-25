@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (fix)
 import Data.Array as Array
@@ -36,21 +36,24 @@ l = T.makeTokenParser langStyle
       , reservedOpNames = [ "+", "-", "*", "/", "<", ">", "<=", ">=", "==" ]
       }
 
-expr :: Parser (Expr String)
+noNote :: Expr' Unit String -> Expr Unit String
+noNote e = { expr: e, note: unit }
+
+expr :: Parser (Expr Unit String)
 expr = fix \e ->
   buildExprParser
-    [ [ Infix (l.reservedOp "/" $> BinOpE Div) AssocRight
-      , Infix (l.reservedOp "*" $> BinOpE Mul) AssocRight
+    [ [ Infix (l.reservedOp "/" $> \l' r' -> noNote (BinOpE Div l' r')) AssocRight
+      , Infix (l.reservedOp "*" $> \l' r' -> noNote (BinOpE Mul l' r')) AssocRight
       ]
-    , [ Infix (l.reservedOp "-" $> BinOpE Sub) AssocRight
-      , Infix (l.reservedOp "+" $> BinOpE Add) AssocRight
+    , [ Infix (l.reservedOp "-" $> \l' r' -> noNote (BinOpE Sub l' r')) AssocRight
+      , Infix (l.reservedOp "+" $> \l' r' -> noNote (BinOpE Add l' r')) AssocRight
       ]
-    , [ Infix (l.reservedOp "<" $> BinOpE Lt) AssocRight
-      , Infix (l.reservedOp ">" $> BinOpE Gt) AssocRight
+    , [ Infix (l.reservedOp "<" $> \l' r' -> noNote (BinOpE Lt l' r')) AssocRight
+      , Infix (l.reservedOp ">" $> \l' r' -> noNote (BinOpE Gt l' r')) AssocRight
       ]
-    , [ Infix (l.reservedOp "<=" $> BinOpE Lte) AssocRight
-      , Infix (l.reservedOp ">=" $> BinOpE Gte) AssocRight
-      , Infix (l.reservedOp "==" $> BinOpE Eq) AssocRight
+    , [ Infix (l.reservedOp "<=" $> \l' r' -> noNote (BinOpE Lte l' r')) AssocRight
+      , Infix (l.reservedOp ">=" $> \l' r' -> noNote (BinOpE Gte l' r')) AssocRight
+      , Infix (l.reservedOp "==" $> \l' r' -> noNote (BinOpE Eq l' r')) AssocRight
       ]
     ]
     (expr1 e)
@@ -64,36 +67,36 @@ intLit = do
     Nothing -> P.fail "Failed to parse number"
     Just n -> pure n
 
-expr1 :: Parser (Expr String) -> Parser (Expr String)
+expr1 :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 expr1 e = block e <|> atom e
 
-varOrCall :: Parser (Expr String) -> Parser (Expr String)
+varOrCall :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 varOrCall e = do
   ident <- l.identifier
   C.optionMaybe (l.parens (l.commaSep e)) >>= case _ of
-    Nothing -> pure (VarE ident)
-    Just args -> pure (CallE ident (Array.fromFoldable args))
+    Nothing -> pure (noNote (VarE ident))
+    Just args -> pure (noNote (CallE ident (Array.fromFoldable args)))
 
-atom :: Parser (Expr String) -> Parser (Expr String)
+atom :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 atom e =
-  map LitE lit
+  map (noNote <<< LitE) lit
     <|> varOrCall e
-    <|> IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e)
+    <|> map noNote (IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e))
     <|> l.parens e
 
-block :: Parser (Expr String) -> Parser (Expr String)
+block :: Parser (Expr Unit String) -> Parser (Expr Unit String)
 block e =
-  BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep (decl e))
+  noNote <<< BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep (decl e))
 
 lit :: Parser Lit
 lit = map IntLit intLit
   <|> l.reserved "true" $> BoolLit true
   <|> l.reserved "false" $> BoolLit true
 
-parseExpr :: String -> Either P.ParseError (Expr String)
+parseExpr :: String -> Either P.ParseError (Expr Unit String)
 parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 
-decl :: Parser (Expr String) -> Parser (Decl String)
+decl :: Parser (Expr Unit String) -> Parser (Decl Unit String)
 decl e =
   LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e
     <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e
@@ -110,7 +113,7 @@ funcTy = ado
   result <- (l.reserved "()" $> TyUnit) <|> valTy
   in FuncTy (Array.fromFoldable arguments) result
 
-topFunc :: Parser (Toplevel String)
+topFunc :: Parser (Toplevel Unit String)
 topFunc = ado
   l.reserved "fn"
   name <- l.identifier
@@ -126,7 +129,7 @@ topFunc = ado
     ty <- valTy
     in { name, ty }
 
-topLet :: Parser (Toplevel String)
+topLet :: Parser (Toplevel Unit String)
 topLet = ado
   l.reserved "let"
   n <- l.identifier
@@ -135,7 +138,7 @@ topLet = ado
   l.symbol ";"
   in TopLet n initializer
 
-topImport :: Parser (Toplevel String)
+topImport :: Parser (Toplevel Unit String)
 topImport = ado
   l.reserved "import"
   name <- l.identifier
@@ -145,8 +148,8 @@ topImport = ado
   externalName <- l.identifier
   in TopImport name ty externalName
 
-topLevel :: Parser (Toplevel String)
+topLevel :: Parser (Toplevel Unit String)
 topLevel = topImport <|> topLet <|> topFunc
 
-parseProgram :: String -> Either P.ParseError (Program String)
+parseProgram :: String -> Either P.ParseError (Program Unit String)
 parseProgram i = P.runParser i (l.whiteSpace *> Array.some topLevel <* PS.eof)
