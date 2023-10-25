@@ -39,7 +39,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, TypeIdx, ValType, emptyModule)
+import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
 
 -- - Define functions
 -- - Define globals
@@ -69,7 +69,7 @@ type Env name =
   , funcsSupply :: Ref Int
   , globals :: Ref (Map name GlobalData)
   , globalsSupply :: Ref Int
-  , types :: Ref (Array FuncType)
+  , types :: Ref (Array RecType)
   , memory :: Ref (Maybe Memory)
   , imports :: Ref (Map name ImportData)
   , exports :: Ref (Array Export)
@@ -101,10 +101,11 @@ mkBuilder act = Builder (ReaderT act)
 
 declareType :: forall name. FuncType -> Builder name TypeIdx
 declareType ty = mkBuilder \{ types } -> do
+  let funcTy = [ { final: true, supertypes: [], ty: CompFunc ty } ]
   ts <- Ref.read types
-  case Array.findIndex (_ == ty) ts of
+  case Array.findIndex (_ == funcTy) ts of
     Nothing -> do
-      Ref.write (Array.snoc ts ty) types
+      Ref.write (Array.snoc ts funcTy) types
       pure (Array.length ts)
     Just ix ->
       pure ix

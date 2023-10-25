@@ -47,29 +47,7 @@ fn tick(elapsed_time_ms : f32) = {
 }
 `.trim();
 
-let compiledWasm = compileProgram(program);
-
-const editor = ace.edit("editor");
-editor.setValue(program);
-
-let renamed = renameProgram(editor.getValue())
-editor.session.on('change', function(delta) {
-  try {
-    renamed = renameProgram(editor.getValue())
-    document.getElementById("output").innerText = renamed
-
-    compiledWasm = compileProgram(editor.getValue())
-    initWasm().then(newTick => {
-      clearCanvas()
-      tick = newTick
-    })
-  } catch (err) {
-    console.error(err)
-  }
-});
-
 const canvas = document.getElementById("canvas");
-
 /**
  * @type CanvasRenderingContext2D
  */
@@ -87,29 +65,132 @@ function draw_line(startx, starty, endx, endy) {
   ctx.stroke()
 }
 
-async function initWasm() {
-  const imports = {
-    env: {
-      draw_line: draw_line,
-      clear_canvas: clearCanvas
-    }
-  }
-  // const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), imports)
-  const obj = await WebAssembly.instantiate(compiledWasm, imports)
-  return (elapsed) => {
-    obj.instance.exports.tick(elapsed)
-  }
+let tick = () => {}
+let autoRecompile = true
+
+function setInfo(text) {
+  document.getElementById("info-box").innerText = text
 }
 
-document.getElementById("output").innerText = renamed
-let tick = await initWasm()
+function appendInfo(text) {
+  document.getElementById("info-box").innerText += "\n" + text
+}
+
+const editor = ace.edit("editor");
+
+function setEditorContent(text) {
+  editor.setValue(text);
+}
+
+function getEditorContent() {
+  return editor.getValue()
+}
+
+setEditorContent(program)
+
+document.getElementById("stopBtn").onclick = function(e) {
+  e.preventDefault()
+  e.stopPropagation()
+
+  console.log("Stopping")
+  tick = undefined
+}
+
+document.getElementById("startBtn").onclick = function(e) {
+  e.preventDefault()
+  e.stopPropagation()
+
+  console.log("Starting")
+  restartRender()
+}
+
+document.getElementById("toggleAuto").onclick = function(e) {
+  e.preventDefault()
+  e.stopPropagation()
+
+  autoRecompile = !autoRecompile
+  document.getElementById("toggleAuto").innerText = autoRecompile ? "Recompile: On" : "Recompile: Off";
+}
+
+function runCompiler(text) {
+  setInfo("")
+  let renamed;
+  try {
+    renamed = renameProgram(text)
+  } catch(err) {
+    appendInfo("Failed to rename with: " + err.toString())
+  }
+  let compiled;
+  try {
+    compiled = compileProgram(text)
+  } catch(err) {
+    appendInfo("Failed to compile with: " + err.toString())
+  }
+  return { renamed, compiled }
+}
+
+async function instantiateWasm(compiledWasm) {
+  try {
+    const imports = {
+      env: {
+        draw_line: draw_line,
+        clear_canvas: clearCanvas
+      }
+    }
+    const obj = await WebAssembly.instantiate(compiledWasm, imports)
+    return (elapsed) => {
+      obj.instance.exports.tick(elapsed)
+    }
+  } catch(err) {
+    appendInfo("Failed to instantiate wasm with: " + err)
+  }
+
+  runCompiler(getEditorContent())
+}
 
 let previousTimeStamp;
 function render(timeStamp) {
   const elapsed = timeStamp - (previousTimeStamp ?? timeStamp);
   previousTimeStamp = timeStamp;
-  tick(elapsed)
-  requestAnimationFrame(render)
+  if (tick) {
+    tick(elapsed)
+    requestAnimationFrame(render)
+  }
 }
 
-requestAnimationFrame(render)
+function restartRender() {
+  previousTimeStamp = undefined
+  const { renamed, compiled } = runCompiler(getEditorContent())
+  if (renamed) {
+    appendInfo(renamed)
+  }
+  if (compiled) {
+    instantiateWasm(compiled).then(newTick => {
+      clearCanvas()
+      tick = newTick
+    }).then(() => {
+      requestAnimationFrame(render)
+    })
+  }
+}
+
+restartRender()
+
+async function runPlayground() {
+  editor.session.on('change', () => {
+    if (autoRecompile) {
+      restartRender()
+    }
+  });
+}
+
+async function runStaticWasm() {
+  async function initWasm() {
+    const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), {})
+    setInfo(obj.instance.exports.main())
+  }
+
+  initWasm()
+}
+
+runPlayground()
