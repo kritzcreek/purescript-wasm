@@ -211,6 +211,12 @@ write_instr b = case _ of
     DBuffer.addByte b 0xC1
   S.I32Wrap_i64 ->
     DBuffer.addByte b 0xA7
+  S.I32TruncF32_s ->
+    DBuffer.addByte b 0xA8
+  S.I32TruncF32_u ->
+    DBuffer.addByte b 0xA9
+  S.I32ReinterpretF32 ->
+    DBuffer.addByte b 0xBC
   S.F32Const n -> do
     DBuffer.addByte b 0x43
     float32 b n
@@ -254,6 +260,10 @@ write_instr b = case _ of
     DBuffer.addByte b 0x97
   S.F32Copysign ->
     DBuffer.addByte b 0x98
+  S.F32ConvertI32_s ->
+    DBuffer.addByte b 0xB2
+  S.F32ConvertI32_u ->
+    DBuffer.addByte b 0xB3
   S.RefNull t -> do
     DBuffer.addByte b 0xD0
     write_ref_type b t

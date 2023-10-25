@@ -93,6 +93,9 @@ data Instruction
   | I32Extend8_s
   | I32Extend16_s
   | I32Wrap_i64
+  | I32TruncF32_s
+  | I32TruncF32_u
+  | I32ReinterpretF32
 
   -- Floating Point Instructions
 
@@ -117,6 +120,8 @@ data Instruction
   | F32Min
   | F32Max
   | F32Copysign
+  | F32ConvertI32_s
+  | F32ConvertI32_u
 
   -- Reference instructions
   | RefNull RefType
@@ -198,6 +203,9 @@ instance showInstruction :: Show Instruction where
     I32Extend8_s -> "i32.extend8_s"
     I32Extend16_s -> "i32.extend16_s"
     I32Wrap_i64 -> "i32.wrap_i64"
+    I32TruncF32_s -> "i32.trunc_f32_s"
+    I32TruncF32_u -> "i32.trunc_f32_u"
+    I32ReinterpretF32 -> "i32.reinterpret_f32"
     F32Const x -> "f32.const " <> show x
     F32Eq -> "f32.eq"
     F32Neq -> "f32.eq"
@@ -219,6 +227,8 @@ instance showInstruction :: Show Instruction where
     F32Min -> "f32.min"
     F32Max -> "f32.max"
     F32Copysign -> "f32.copysign"
+    F32ConvertI32_s -> "f32.convert_i32_s"
+    F32ConvertI32_u -> "f32.convert_i32_u"
     RefNull x -> "ref.null " <> show x
     RefIsNull -> "ref.is_null"
     RefFunc x -> "ref.func " <> show x
