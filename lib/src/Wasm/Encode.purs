@@ -321,6 +321,67 @@ write_instr b = case _ of
   S.RefFunc idx -> do
     DBuffer.addByte b 0xD2
     write_u32 b idx
+  S.ArrayNew x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 6
+    write_u32 b x
+  S.ArrayNewDefault x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 7
+    write_u32 b x
+  S.ArrayNewFixed x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 8
+    write_u32 b x
+    write_u32 b y
+  S.ArrayNewData x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 9
+    write_u32 b x
+    write_u32 b y
+  S.ArrayNewElem x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 10
+    write_u32 b x
+    write_u32 b y
+  S.ArrayGet x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 11
+    write_u32 b x
+  S.ArrayGet_s x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 12
+    write_u32 b x
+  S.ArrayGet_u x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 13
+    write_u32 b x
+  S.ArraySet x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 14
+    write_u32 b x
+  S.ArrayLen -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 15
+  S.ArrayFill x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 16
+    write_u32 b x
+  S.ArrayCopy x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 17
+    write_u32 b x
+    write_u32 b y
+  S.ArrayInitData x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 18
+    write_u32 b x
+    write_u32 b y
+  S.ArrayInitElem x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 19
+    write_u32 b x
+    write_u32 b y
   S.Drop ->
     DBuffer.addByte b 0x1A
   S.Select m_tys -> case m_tys of

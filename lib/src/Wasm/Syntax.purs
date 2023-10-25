@@ -105,6 +105,7 @@ type FuncIdx = Int
 type MemoryIdx = Int
 type TableIdx = Int
 type DataIdx = Int
+type ElemIdx = Int
 
 type Expr = Array Instruction
 
@@ -178,6 +179,22 @@ data Instruction
   | RefNull RefType
   | RefIsNull
   | RefFunc FuncIdx
+
+  -- Aggregate Instructions
+  | ArrayNew TypeIdx
+  | ArrayNewFixed TypeIdx Int
+  | ArrayNewDefault TypeIdx
+  | ArrayNewData TypeIdx DataIdx
+  | ArrayNewElem TypeIdx ElemIdx
+  | ArrayGet TypeIdx
+  | ArrayGet_s TypeIdx
+  | ArrayGet_u TypeIdx
+  | ArraySet TypeIdx
+  | ArrayLen
+  | ArrayFill TypeIdx
+  | ArrayCopy TypeIdx TypeIdx
+  | ArrayInitData TypeIdx DataIdx
+  | ArrayInitElem TypeIdx ElemIdx
 
   -- Parametric Instructions
   | Drop
@@ -283,6 +300,20 @@ instance showInstruction :: Show Instruction where
     RefNull x -> "ref.null " <> show x
     RefIsNull -> "ref.is_null"
     RefFunc x -> "ref.func " <> show x
+    ArrayNew x -> "array.new " <> show x
+    ArrayNewFixed x y -> "array.new_fixed " <> show x <> " " <> show y
+    ArrayNewDefault x -> "array.new_default " <> show x
+    ArrayNewData x y -> "array.new_data " <> show x <> " " <> show y
+    ArrayNewElem x y -> "array.new_elem " <> show x <> " " <> show y
+    ArrayGet x -> "array.get " <> show x
+    ArrayGet_s x -> "array.get_s " <> show x
+    ArrayGet_u x -> "array.get_u " <> show x
+    ArraySet x -> "array.set " <> show x
+    ArrayLen -> "array.len"
+    ArrayFill x -> "array.fill " <> show x
+    ArrayCopy x y -> "array.copy " <> show x <> " " <> show y
+    ArrayInitData x y -> "array.init_data " <> show x <> " " <> show y
+    ArrayInitElem x y -> "array.init_elem " <> show x <> " " <> show y
     Drop -> "drop"
     Select Nothing -> "select"
     Select (Just tys) -> "select " <> String.joinWith " " (map show tys)
