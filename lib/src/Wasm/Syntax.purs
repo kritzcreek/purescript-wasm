@@ -5,8 +5,8 @@ module Wasm.Syntax where
 
 import Prelude
 
-import Data.String as String
 import Data.Maybe (Maybe(..))
+import Data.String as String
 
 data RefType = NullFuncRef | FuncRef | ExternRef
 
@@ -94,6 +94,30 @@ data Instruction
   | I32Extend16_s
   | I32Wrap_i64
 
+  -- Floating Point Instructions
+
+  | F32Const Number
+  | F32Eq
+  | F32Neq
+  | F32Lt
+  | F32Gt
+  | F32Ge
+  | F32Le
+  | F32Abs
+  | F32Neg
+  | F32Ceil
+  | F32Floor
+  | F32Trunc
+  | F32Nearest
+  | F32Sqrt
+  | F32Add
+  | F32Sub
+  | F32Mul
+  | F32Div
+  | F32Min
+  | F32Max
+  | F32Copysign
+
   -- Reference instructions
   | RefNull RefType
   | RefIsNull
@@ -174,6 +198,27 @@ instance showInstruction :: Show Instruction where
     I32Extend8_s -> "i32.extend8_s"
     I32Extend16_s -> "i32.extend16_s"
     I32Wrap_i64 -> "i32.wrap_i64"
+    F32Const x -> "f32.const " <> show x
+    F32Eq -> "f32.eq"
+    F32Neq -> "f32.eq"
+    F32Lt -> "f32.lt"
+    F32Gt -> "f32.gt"
+    F32Ge -> "f32.ge"
+    F32Le -> "f32.le"
+    F32Abs -> "f32.abs"
+    F32Neg -> "f32.neg"
+    F32Ceil -> "f32.ceil"
+    F32Floor -> "f32.floor"
+    F32Trunc -> "f32.trunc"
+    F32Nearest -> "f32.nearest"
+    F32Sqrt -> "f32.sqrt"
+    F32Add -> "f32.add"
+    F32Sub -> "f32.sub"
+    F32Mul -> "f32.mul"
+    F32Div -> "f32.div"
+    F32Min -> "f32.min"
+    F32Max -> "f32.max"
+    F32Copysign -> "f32.copysign"
     RefNull x -> "ref.null " <> show x
     RefIsNull -> "ref.is_null"
     RefFunc x -> "ref.func " <> show x
