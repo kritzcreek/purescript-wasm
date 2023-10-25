@@ -3,17 +3,18 @@
   "type": "module",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "build": "spago build",
+    "build": "spago build -p example",
     "start": "spago run -p example",
     "format": "purs-tidy format-in-place src example",
+    "play": "echo 'Open the browser at http://127.0.0.1:8080/playground' && live-server . --open=/playground",
     "pscid": "pscid -I \"lib;example\" --test",
     "pscid:test": "npm start; exit 1"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "live-server": "^1.2.2",
     "pscid": "^2.11.0",
     "purescript": "^0.15.12",
     "purs-tidy": "^0.10.0",
