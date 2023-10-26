@@ -16,10 +16,10 @@ function canvasProgram() {
 import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
-let x = 0.0;
-let y = 0.0;
-let vx = 11.0;
-let vy = 10.0;
+let xs = [0.0, 500.0, 0.0, 500.0];
+let ys = [0.0, 500.0, 500.0, 0.0];
+let vxs = [11.0, 0.0 - 11.0, 13.0, 0.0 - 11.0];
+let vys = [10.0, 0.0 - 10.0, 10.0, 0.0 - 16.0];
 
 fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x, y, x + size, y);
@@ -28,34 +28,43 @@ fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x + size, y + size, x + size, y)
 }
 
-fn tick(elapsed_time_ms : f32) : i32 = {
+fn tick_box(elapsed_time_ms : f32, idx: i32) : i32 = {
   let elapsed_factor = elapsed_time_ms / 32.0;
-  set x = x + (vx * elapsed_factor);
-  set y = y + (vy * elapsed_factor);
 
-  if x < 0.0 {
-    set x = 0.0;
-    set vx = 0.0 - vx;
-    0
-  } else {0};
-  if x > 500.0 {
-    set x = 500.0;
-    set vx = 0.0 - vx;
-    0
-  } else {0};
+  set xs[idx] = xs[idx] + vxs[idx] * elapsed_factor;
+  set ys[idx] = ys[idx] + vys[idx] * elapsed_factor;
 
-  if y < 0.0 {
-    set y = 0.0;
-    set vy = 0.0 - vy;
+  if xs[idx] < 0.0 {
+    set xs[idx] = 0.0;
+    set vxs[idx] = 0.0 - vxs[idx];
     0
   } else {0};
-  if y > 500.0 {
-    set y = 500.0;
-    set vy = 0.0 - vy;
+  if xs[idx] > 500.0 {
+    set xs[idx] = 500.0;
+    set vxs[idx] = 0.0 - vxs[idx];
     0
   } else {0};
 
-  draw_cube(x, y, 20.0)
+  if ys[idx] < 0.0 {
+    set ys[idx] = 0.0;
+    set vys[idx] = 0.0 - vys[idx];
+    0
+  } else {0};
+  if ys[idx] > 500.0 {
+    set ys[idx] = 500.0;
+    set vys[idx] = 0.0 - vys[idx];
+    0
+  } else {0};
+
+  draw_cube(xs[idx], ys[idx], 20.0)
+}
+
+fn tick(elapsed_time_ms : f32) : i32 = {
+  clear();
+  tick_box(elapsed_time_ms, 0);
+  tick_box(elapsed_time_ms, 1);
+  tick_box(elapsed_time_ms, 2);
+  tick_box(elapsed_time_ms, 3)
 }
 `.trim();
 }
