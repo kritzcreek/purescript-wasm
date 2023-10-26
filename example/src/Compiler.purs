@@ -5,7 +5,7 @@ import Prelude
 import Ast as Ast
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (for, traverse, traverse_)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import Rename (Var(..))
@@ -24,9 +24,16 @@ type CToplevel = Ast.Toplevel Types.Ty Var
 
 type CProgram = Ast.Program Types.Ty Var
 
+data InitTask = FuncTask FillFunc | GlobalTask InitGlobal
+
 type FillFunc =
   { fill :: Array S.ValType -> S.Expr -> Builder Unit
   , func :: CFunc
+  }
+
+type InitGlobal =
+  { idx :: S.GlobalIdx
+  , init :: CExpr
   }
 
 i32 :: S.ValType
@@ -73,32 +80,57 @@ declareArrayType = case _ of
     Builder.declareType [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
   _ -> unsafeCrashWith "non-array type for array literal"
 
+getFuncTask :: InitTask -> Maybe FillFunc
+getFuncTask = case _ of
+  FuncTask ft -> Just ft
+  _ -> Nothing
+
+getGlobalTask :: InitTask -> Maybe InitGlobal
+getGlobalTask = case _ of
+  GlobalTask it -> Just it
+  _ -> Nothing
+
+
 compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
-  traverse_ implFunc (Array.catMaybes fills)
+  traverse_ implFunc (Array.mapMaybe (getFuncTask =<< _) fills)
+  initializeGlobals (Array.mapMaybe (getGlobalTask =<< _) fills)
 
-declareToplevel :: CToplevel -> Builder (Maybe FillFunc)
+initializeGlobals :: Array InitGlobal -> Builder Unit
+initializeGlobals igs = do
+  fill <- Builder.declareFunc (FunctionV (-1)) { arguments: [], results: [] }
+  fnBody <- bodyBuild [] do
+    iss <- for igs \ig -> do
+      is <- compileExpr ig.init
+      pure (is <> [S.GlobalSet ig.idx])
+    pure (Array.fold iss)
+  fill fnBody.locals fnBody.result
+  Builder.declareStart (FunctionV (-1))
+
+declareToplevel :: CToplevel -> Builder (Maybe InitTask)
 declareToplevel = case _ of
   Ast.TopLet name init -> do
     ty <- typeOf init
-    _ <- Builder.declareGlobal name { mutability: S.Var, type: ty } (compileConst init)
-    pure Nothing
+    idx <- Builder.declareGlobal name { mutability: S.Var, type: ty } (compileConst init ty)
+    pure (Just (GlobalTask { idx, init }))
   Ast.TopFunc func -> do
     result <- declareFunc func
     case func.export of
       Nothing -> pure unit
       Just exportName -> Builder.declareExport func.name exportName
-    pure (Just result)
+    pure (Just (FuncTask result))
   Ast.TopImport name ty externalName -> do
     tyIdx <- Builder.declareFuncType =<< astFuncTy ty
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
 
-compileConst :: forall a b. Ast.Expr a b -> S.Expr
-compileConst e = unsafePartial case e.expr of
-  Ast.LitE (Ast.IntLit x) -> [ S.I32Const x ]
-  Ast.LitE (Ast.FloatLit x) -> [ S.F32Const x ]
+compileConst :: forall a b. Ast.Expr a b -> S.ValType -> S.Expr
+compileConst e ty = unsafePartial case e.expr, ty of
+  Ast.LitE (Ast.IntLit x), _ -> [ S.I32Const x ]
+  Ast.LitE (Ast.FloatLit x), _ -> [ S.F32Const x ]
+  -- TODO: Make this nicer
+  Ast.ArrayE _, (S.RefType (S.HeapTypeRef _ ht)) -> [ S.RefNull ht ]
 
 compileOp :: Types.Ty -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
@@ -140,7 +172,7 @@ compileExpr expr = case expr.expr of
       ix <- Builder.liftBuilder (Builder.lookupGlobal x)
       pure [ S.GlobalGet ix ]
     LocalV _ -> do
-      ix <- Builder.getLocal x
+      ix <- Builder.lookupLocal x
       pure [ S.LocalGet ix ]
     FunctionV _ -> do
       unsafeCrashWith "illegal function reference in variable position"
@@ -206,10 +238,21 @@ compileBlock decls = do
         Ast.ArrayIdxST n ix -> do
           let elemType = Types.typeOf e
           tyArray <- Builder.liftBuilder (declareArrayType (Types.TyArray elemType))
-          array <- Builder.getLocal n
+          arrayVar <- accessVar n
           ixInstrs <- compileExpr ix
           eInstrs <- compileExpr e
-          pure ([ S.LocalGet array ] <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
+          pure (arrayVar.get <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
+
+accessVar :: Var -> BodyBuilder { get :: S.Expr, set :: S.Expr }
+accessVar v = case v of
+  GlobalV _ -> do
+    idx <- Builder.liftBuilder (Builder.lookupGlobal v)
+    pure { get: [S.GlobalGet idx], set: [S.GlobalSet idx] }
+  LocalV _ -> do
+    idx <- Builder.lookupLocal v
+    pure { get: [S.LocalGet idx], set: [S.LocalSet idx] }
+  FunctionV _ ->
+    unsafeCrashWith "Can't reassign a function"
 
 declareFunc :: CFunc -> Builder FillFunc
 declareFunc func = do

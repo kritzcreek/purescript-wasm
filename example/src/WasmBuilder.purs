@@ -5,6 +5,7 @@ module WasmBuilder
   , bodyBuild
   , build
   , build'
+  , lookupFunc
   , callFunc
   , callImport
   , declareType
@@ -13,9 +14,10 @@ module WasmBuilder
   , declareFunc
   , declareGlobal
   , declareImport
+  , declareStart
   , lookupGlobal
   , newLocal
-  , getLocal
+  , lookupLocal
   , liftBuilder
   ) where
 
@@ -40,7 +42,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
+import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, FuncIdx, emptyModule)
 
 -- - Define functions
 -- - Define globals
@@ -74,6 +76,7 @@ type Env name =
   , memory :: Ref (Maybe Memory)
   , imports :: Ref (Map name ImportData)
   , exports :: Ref (Array Export)
+  , startFn :: Ref (Maybe FuncIdx)
   }
 
 initialEnv :: forall name. Effect (Env name)
@@ -86,7 +89,8 @@ initialEnv = ado
   types <- Ref.new []
   memory <- Ref.new Nothing
   exports <- Ref.new []
-  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports }
+  startFn <- Ref.new Nothing
+  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports, startFn }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -217,6 +221,13 @@ declareExport name exportName = do
       (\es -> Array.snoc es { name: exportName, desc: ExportFunc index })
       exports
 
+declareStart :: forall name. Show name => Ord name => name -> Builder name Unit
+declareStart name = do
+  index <- lookupFunc name
+  mkBuilder \({ startFn }) ->
+    -- TODO: Error on double declaring start
+    Ref.write (Just index) startFn
+
 data BuildError name = MissingBody name
 
 instance showBuildError :: Show name => Show (BuildError name) where
@@ -270,6 +281,7 @@ buildModule env@{ types, memory, exports } = do
   imps <- buildImports env
   mem <- Ref.read memory
   exps <- Ref.read exports
+  startFn <- Ref.read env.startFn
   buildFuncs env <#> case _ of
     Left err ->
       Left err
@@ -282,6 +294,7 @@ buildModule env@{ types, memory, exports } = do
             , memories = Array.fromFoldable mem
             , exports = exps
             , imports = imps
+            , start = startFn
             }
         )
 
@@ -353,13 +366,13 @@ newLocal name ty = do
     Ref.modify_ (Map.insert name { index, ty }) locals
     pure index
 
-getLocal
+lookupLocal
   :: forall name
    . Show name
   => Ord name
   => name
   -> BodyBuilder name LocalIdx
-getLocal name = do
+lookupLocal name = do
   mkBodyBuilder \{ locals } -> liftEffect do
     ls <- Ref.read locals
     case Map.lookup name ls of
