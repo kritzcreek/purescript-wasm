@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (defer)
 import Data.Array as Array
@@ -119,8 +119,15 @@ parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 decl :: Parser (Decl Unit String)
 decl = defer \_ ->
   LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr
-    <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> expr
+    <|> SetD <$> (l.reserved "set" *> setTarget <* l.symbol "=") <*> expr
     <|> ExprD <$> expr
+
+setTarget :: Parser (SetTarget Unit String)
+setTarget = do
+  name <- l.identifier
+  C.optionMaybe (l.brackets expr) >>= case _ of
+    Nothing -> pure (VarST name)
+    Just ix -> pure (ArrayIdxST name ix)
 
 valTy :: Parser ValTy
 valTy = defer \_ ->

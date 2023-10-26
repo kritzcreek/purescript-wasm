@@ -194,13 +194,22 @@ compileBlock decls = do
       var <- Builder.newLocal n ty
       is <- compileExpr e
       pure (is <> [ S.LocalSet var ])
-    Ast.SetD n e -> do
-      case n of
-        GlobalV _ -> do
-          ix <- Builder.liftBuilder (Builder.lookupGlobal n)
-          is <- compileExpr e
-          pure (is <> [ S.GlobalSet ix ])
-        _ -> unsafeCrashWith "Unknown set target"
+    Ast.SetD t e -> do
+      case t of
+        Ast.VarST n ->
+          case n of
+            GlobalV _ -> do
+              ix <- Builder.liftBuilder (Builder.lookupGlobal n)
+              is <- compileExpr e
+              pure (is <> [ S.GlobalSet ix ])
+            _ -> unsafeCrashWith "Unknown set target"
+        Ast.ArrayIdxST n ix -> do
+          let elemType = Types.typeOf e
+          tyArray <- Builder.liftBuilder (declareArrayType (Types.TyArray elemType))
+          array <- Builder.getLocal n
+          ixInstrs <- compileExpr ix
+          eInstrs <- compileExpr e
+          pure ([ S.LocalGet array ] <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
 
 declareFunc :: CFunc -> Builder FillFunc
 declareFunc func = do

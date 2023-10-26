@@ -2,7 +2,7 @@ module Printer (printFuncs, printProgram, printExpr, printDecl, renderAll, rende
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
 import Data.Array as Array
 import Data.Map (Map)
 import Data.Map as Map
@@ -99,10 +99,17 @@ renderDecl :: forall a note name. RenderOptions note name a -> Decl note name ->
 renderDecl renderOptions = case _ of
   LetD name expr ->
     (text "let" <+> renderOptions.renderName name <+> text "=") </> indent (renderExpr renderOptions expr)
-  SetD name expr ->
-    (text "set" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
+  SetD setTarget expr ->
+    (text "set" <+> renderSetTarget renderOptions setTarget <+> text "=") </> renderExpr renderOptions expr
   ExprD expr ->
     renderExpr renderOptions expr
+
+renderSetTarget :: forall a note name. RenderOptions note name a -> SetTarget note name -> Doc a
+renderSetTarget renderOptions = case _ of
+  VarST n ->
+    renderOptions.renderName n
+  ArrayIdxST n ix ->
+    renderOptions.renderName n <> brackets (renderExpr renderOptions ix)
 
 renderFunc :: forall a note name. RenderOptions note name a -> Func note name -> Doc a
 renderFunc renderOptions func = do

@@ -36,11 +36,19 @@ instance showExpr :: (Show note, Show a) => Show (Expr' note a) where
 
 data Decl note name
   = LetD name (Expr note name)
-  | SetD name (Expr note name)
+  | SetD (SetTarget note name) (Expr note name)
   | ExprD (Expr note name)
 
 derive instance genericDecl :: Generic (Decl note name) _
 instance showDecl :: (Show note, Show name) => Show (Decl note name) where
+  show x = genericShow x
+
+data SetTarget note name
+  = VarST name
+  | ArrayIdxST name (Expr note name)
+
+derive instance Generic (SetTarget note name) _
+instance (Show note, Show name) => Show (SetTarget note name) where
   show x = genericShow x
 
 isLetD :: forall note name. Decl note name -> Boolean

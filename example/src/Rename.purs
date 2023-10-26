@@ -2,7 +2,7 @@ module Rename (Var(..), printVar, renameProgram, findFunc) where
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Program, Toplevel(..))
+import Ast (Decl(..), Expr, Expr'(..), Program, SetTarget(..), Toplevel(..))
 import Control.Monad.State (State)
 import Control.Monad.State as State
 import Data.Array as Array
@@ -142,10 +142,23 @@ renameDecl = case _ of
     expr' <- renameExpr expr
     var <- mkVar LocalV binder
     pure (LetD var expr')
-  SetD binder expr -> do
-    var <- lookupVar binder
+  SetD target expr -> do
+    target' <- renameSetTarget target
     expr' <- renameExpr expr
-    pure (SetD var expr')
+    pure (SetD target' expr')
   ExprD expr -> do
     expr' <- renameExpr expr
     pure (ExprD expr')
+
+renameSetTarget
+  :: forall note
+   . SetTarget note String
+  -> Rename (SetTarget note Var)
+renameSetTarget = case _ of
+  VarST binder -> do
+    var <- lookupVar binder
+    pure (VarST var)
+  ArrayIdxST binder ix -> do
+    var <- lookupVar binder
+    ix' <- renameExpr ix
+    pure (ArrayIdxST var ix')
