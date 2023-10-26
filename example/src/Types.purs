@@ -76,6 +76,11 @@ checkTyNum = case _ of
   TyI32 -> pure unit
   t -> Left ("Expected a numeric type but got: " <> show t)
 
+checkTyArray :: Ty -> Either String Unit
+checkTyArray = case _ of
+  TyArray _ -> pure unit
+  t -> Left ("Expected an array type but got: " <> show t)
+
 checkNumericOperator :: Ty -> Ty -> Either String Ty
 checkNumericOperator tyL tyR = do
   checkTyNum tyL
@@ -134,6 +139,18 @@ inferExpr ctx expr = case expr.expr of
     args' <- traverse (inferExpr ctx) args
     _ <- Array.zipWithA (\expected arg -> checkTy expected (typeOf arg)) argTys args'
     pure { expr: Ast.CallE fn args', note: resTy }
+  Ast.IntrinsicE i args -> do
+    args' <- traverse (inferExpr ctx) args
+    ty <- case i, args' of
+      Ast.ArrayLen, [ arr ] -> do
+        checkTyArray (typeOf arr)
+        pure TyI32
+      Ast.ArrayNew, [ elem, size ] -> do
+        checkTy TyI32 (typeOf size)
+        pure (TyArray (typeOf elem))
+      _, _ -> do
+        Left ("invalid arguments for intrinsic: " <> show i)
+    pure { expr: Ast.IntrinsicE i args', note: ty }
   Ast.BlockE decls -> do
     result <- inferDecls ctx decls
     pure { expr: Ast.BlockE result.decls, note: result.ty }

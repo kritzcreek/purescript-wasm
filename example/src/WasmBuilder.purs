@@ -42,7 +42,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, FuncIdx, emptyModule)
+import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
 
 -- - Define functions
 -- - Define globals

@@ -88,6 +88,8 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
       <+> renderExpr renderOptions e
   CallE func args ->
     renderOptions.renderName func <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
+  IntrinsicE i args ->
+    text (show i) <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
   ArrayE elements ->

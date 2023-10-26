@@ -28,6 +28,7 @@ data Expr' note name
   | BinOpE Op (Expr note name) (Expr note name)
   | IfE (Expr note name) (Expr note name) (Expr note name)
   | CallE name (Array (Expr note name))
+  | IntrinsicE Intrinsic (Array (Expr note name))
   | BlockE (Array (Decl note name))
 
 derive instance genericExpr :: Generic (Expr' note a) _
@@ -94,3 +95,14 @@ derive instance Eq FuncTy
 derive instance Generic FuncTy _
 instance Show FuncTy where
   show x = genericShow x
+
+data Intrinsic
+  = ArrayNew
+  | ArrayLen
+
+derive instance Eq Intrinsic
+derive instance Generic Intrinsic _
+instance Show Intrinsic where
+  show = case _ of
+    ArrayNew -> "@array_new"
+    ArrayLen -> "@array_len"

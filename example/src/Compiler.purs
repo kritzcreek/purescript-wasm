@@ -7,7 +7,7 @@ import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for, traverse, traverse_)
 import Data.Tuple (Tuple(..))
-import Partial.Unsafe (unsafeCrashWith, unsafePartial)
+import Partial.Unsafe (unsafeCrashWith)
 import Rename (Var(..))
 import Types as Types
 import Wasm.Syntax as S
@@ -90,7 +90,6 @@ getGlobalTask = case _ of
   GlobalTask it -> Just it
   _ -> Nothing
 
-
 compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
@@ -103,7 +102,7 @@ initializeGlobals igs = do
   fnBody <- bodyBuild [] do
     iss <- for igs \ig -> do
       is <- compileExpr ig.init
-      pure (is <> [S.GlobalSet ig.idx])
+      pure (is <> [ S.GlobalSet ig.idx ])
     pure (Array.fold iss)
   fill fnBody.locals fnBody.result
   Builder.declareStart (FunctionV (-1))
@@ -112,8 +111,21 @@ declareToplevel :: CToplevel -> Builder (Maybe InitTask)
 declareToplevel = case _ of
   Ast.TopLet name init -> do
     ty <- typeOf init
-    idx <- Builder.declareGlobal name { mutability: S.Var, type: ty } (compileConst init ty)
-    pure (Just (GlobalTask { idx, init }))
+    case compileConst init of
+      Just expr -> do
+        _ <- Builder.declareGlobal name { mutability: S.Var, type: ty } expr
+        pure Nothing
+      Nothing -> do
+        expr <- case Types.typeOf init of
+          Types.TyI32 -> pure [ S.I32Const 0 ]
+          Types.TyBool -> pure [ S.I32Const 0 ]
+          Types.TyF32 -> pure [ S.F32Const 0.0 ]
+          Types.TyUnit -> pure [ S.I32Const 0 ]
+          t@(Types.TyArray _) -> do
+            arrTy <- declareArrayType t
+            pure [ S.RefNull (S.IndexHt arrTy) ]
+        idx <- Builder.declareGlobal name { mutability: S.Var, type: ty } expr
+        pure (Just (GlobalTask { idx, init }))
   Ast.TopFunc func -> do
     result <- declareFunc func
     case func.export of
@@ -125,12 +137,11 @@ declareToplevel = case _ of
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
 
-compileConst :: forall a b. Ast.Expr a b -> S.ValType -> S.Expr
-compileConst e ty = unsafePartial case e.expr, ty of
-  Ast.LitE (Ast.IntLit x), _ -> [ S.I32Const x ]
-  Ast.LitE (Ast.FloatLit x), _ -> [ S.F32Const x ]
-  -- TODO: Make this nicer
-  Ast.ArrayE _, (S.RefType (S.HeapTypeRef _ ht)) -> [ S.RefNull ht ]
+compileConst :: forall a b. Ast.Expr a b -> Maybe S.Expr
+compileConst e = case e.expr of
+  Ast.LitE (Ast.IntLit x) -> Just [ S.I32Const x ]
+  Ast.LitE (Ast.FloatLit x) -> Just [ S.F32Const x ]
+  _ -> Nothing
 
 compileOp :: Types.Ty -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
@@ -185,6 +196,16 @@ compileExpr expr = case expr.expr of
         Just importCall -> pure importCall
         Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
+  Ast.IntrinsicE Ast.ArrayLen [ arr ] -> do
+    arr' <- compileExpr arr
+    pure (arr' <> [ S.ArrayLen ])
+  Ast.IntrinsicE Ast.ArrayNew [ elem, size ] -> do
+    ty <- Builder.liftBuilder (declareArrayType expr.note)
+    elem' <- compileExpr elem
+    size' <- compileExpr size
+    pure (elem' <> size' <> [ S.ArrayNew ty ])
+  Ast.IntrinsicE i args ->
+    unsafeCrashWith ("invalid intrinsic call: " <> show i <> ", argcount " <> show (Array.length args))
   Ast.BlockE body -> compileBlock body
   Ast.ArrayE elements -> do
     tyIdx <- Builder.liftBuilder (declareArrayType expr.note)
@@ -236,10 +257,10 @@ accessVar :: Var -> BodyBuilder { get :: S.Expr, set :: S.Expr }
 accessVar v = case v of
   GlobalV _ -> do
     idx <- Builder.liftBuilder (Builder.lookupGlobal v)
-    pure { get: [S.GlobalGet idx], set: [S.GlobalSet idx] }
+    pure { get: [ S.GlobalGet idx ], set: [ S.GlobalSet idx ] }
   LocalV _ -> do
     idx <- Builder.lookupLocal v
-    pure { get: [S.LocalGet idx], set: [S.LocalSet idx] }
+    pure { get: [ S.LocalGet idx ], set: [ S.LocalSet idx ] }
   FunctionV _ ->
     unsafeCrashWith "Can't reassign a function"
 

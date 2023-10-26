@@ -122,6 +122,9 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
     fn' <- lookupVar fn
     args' <- traverse renameExpr args
     pure (CallE fn' args')
+  IntrinsicE i args -> do
+    args' <- traverse renameExpr args
+    pure (IntrinsicE i args')
   BlockE b -> withBlock do
     decls <- traverse renameDecl b
     pure (BlockE decls)

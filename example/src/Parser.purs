@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Intrinsic(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
 import Control.Lazy (defer)
 import Data.Array as Array
@@ -94,6 +94,19 @@ atom = defer \_ ->
     <|> map noNote (IfE <$> (l.reserved "if" *> expr) <*> block <*> (l.reserved "else" *> block))
     <|> l.parens expr
     <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep expr))
+    <|> intrinsic
+
+intrinsic :: Parser (Expr Unit String)
+intrinsic = do
+  _ <- PS.char '@'
+  name <- intrinsicName
+  args <- l.parens (l.commaSep expr)
+  pure (noNote (IntrinsicE name (Array.fromFoldable args)))
+
+intrinsicName :: Parser Intrinsic
+intrinsicName =
+  l.reserved "array_len" $> ArrayLen
+    <|> l.reserved "array_new" $> ArrayNew
 
 block :: Parser (Expr Unit String)
 block = defer \_ ->
@@ -104,9 +117,13 @@ foreign import parseFloat :: String -> Number
 numberLit :: Parser Lit
 numberLit = do
   i <- intLit
-  C.optionMaybe (l.symbol "." *> intLit) >>= case _ of
+  C.optionMaybe (l.symbol ".") >>= case _ of
     Nothing -> pure (IntLit i)
-    Just c -> pure (FloatLit (parseFloat (show i <> "." <> show c)))
+    Just _ -> do
+      digits <- many1 T.digit
+      l.whiteSpace
+      let s = CU.fromCharArray (NEA.toArray digits)
+      pure (FloatLit (parseFloat (show i <> "." <> s)))
 
 lit :: Parser Lit
 lit = numberLit
