@@ -181,7 +181,7 @@ data Instruction
   | F32ConvertI32_u
 
   -- Reference instructions
-  | RefNull RefType
+  | RefNull HeapType
   | RefIsNull
   | RefFunc FuncIdx
 

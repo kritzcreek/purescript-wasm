@@ -315,7 +315,7 @@ write_instr b = case _ of
     DBuffer.addByte b 0xB3
   S.RefNull t -> do
     DBuffer.addByte b 0xD0
-    write_ref_type b t
+    write_heap_type b t
   S.RefIsNull ->
     DBuffer.addByte b 0xD1
   S.RefFunc idx -> do
@@ -521,7 +521,7 @@ write_ref_type b = case _ of
   S.FuncRef -> DBuffer.addByte b 0x70
   S.ExternRef -> DBuffer.addByte b 0x6F
   S.HeapTypeRef nullable t -> do
-    DBuffer.addByte b (if nullable then 0x64 else 0x63)
+    DBuffer.addByte b (if nullable then 0x63 else 0x64)
     write_heap_type b t
 
 write_heap_type :: DBuffer -> S.HeapType -> Effect Unit
