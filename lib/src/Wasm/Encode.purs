@@ -680,7 +680,7 @@ write_elem_section b elems = write_section b 9 do
 
 write_locals :: DBuffer -> Array S.ValType -> Array (Effect Unit)
 write_locals b locals = do
-  let grouped = Array.groupAll locals
+  let grouped = Array.group locals
   map
     ( \tys -> do
         write_u32 b (NEA.length tys)
