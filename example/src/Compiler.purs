@@ -167,15 +167,7 @@ compileLit = case _ of
 compileExpr :: CExpr -> BodyBuilder S.Expr
 compileExpr expr = case expr.expr of
   Ast.LitE lit -> pure (compileLit lit)
-  Ast.VarE x -> case x of
-    GlobalV _ -> do
-      ix <- Builder.liftBuilder (Builder.lookupGlobal x)
-      pure [ S.GlobalGet ix ]
-    LocalV _ -> do
-      ix <- Builder.lookupLocal x
-      pure [ S.LocalGet ix ]
-    FunctionV _ -> do
-      unsafeCrashWith "illegal function reference in variable position"
+  Ast.VarE x -> map _.get (accessVar x)
   Ast.BinOpE op l r -> ado
     l' <- compileExpr l
     r' <- compileExpr r
@@ -228,13 +220,10 @@ compileBlock decls = do
       pure (is <> [ S.LocalSet var ])
     Ast.SetD t e -> do
       case t of
-        Ast.VarST n ->
-          case n of
-            GlobalV _ -> do
-              ix <- Builder.liftBuilder (Builder.lookupGlobal n)
-              is <- compileExpr e
-              pure (is <> [ S.GlobalSet ix ])
-            _ -> unsafeCrashWith "Unknown set target"
+        Ast.VarST n -> do
+          var <- accessVar n
+          is <- compileExpr e
+          pure (is <> var.set)
         Ast.ArrayIdxST n ix -> do
           let elemType = Types.typeOf e
           tyArray <- Builder.liftBuilder (declareArrayType (Types.TyArray elemType))
