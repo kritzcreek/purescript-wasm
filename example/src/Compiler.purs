@@ -48,7 +48,7 @@ valTy = case _ of
   Types.TyBool -> pure i32
   Types.TyUnit -> pure i32
   Types.TyArray t -> do
-    elTy <- valTyToSubTy t
+    elTy <- valTy t
     ix <- Builder.declareType
       [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
@@ -65,18 +65,6 @@ funcTy = case _ of
       { arguments: arguments'
       , results: [ result' ]
       }
-
-valTyToSubTy :: Types.Ty -> Builder S.ValType
-valTyToSubTy = case _ of
-  Types.TyI32 -> pure i32
-  Types.TyF32 -> pure f32
-  Types.TyBool -> pure i32
-  Types.TyUnit -> pure i32
-  Types.TyArray t -> do
-    elTy <- valTyToSubTy t
-    ix <- Builder.declareType
-      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
-    pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
 
 compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
