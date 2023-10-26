@@ -7,12 +7,13 @@ module WasmBuilder
   , build'
   , callFunc
   , callImport
+  , declareType
+  , declareFuncType
   , declareExport
   , declareFunc
   , declareGlobal
   , declareImport
   , lookupGlobal
-  , declareType
   , newLocal
   , getLocal
   , liftBuilder
@@ -99,16 +100,20 @@ derive newtype instance MonadEffect (Builder name) -- Remove as this is unsafe
 mkBuilder :: forall name a. (Env name -> Effect a) -> Builder name a
 mkBuilder act = Builder (ReaderT act)
 
-declareType :: forall name. FuncType -> Builder name TypeIdx
+declareType :: forall name. RecType -> Builder name TypeIdx
 declareType ty = mkBuilder \{ types } -> do
-  let funcTy = [ { final: true, supertypes: [], ty: CompFunc ty } ]
   ts <- Ref.read types
-  case Array.findIndex (_ == funcTy) ts of
+  case Array.findIndex (_ == ty) ts of
     Nothing -> do
-      Ref.write (Array.snoc ts funcTy) types
+      Ref.write (Array.snoc ts ty) types
       pure (Array.length ts)
     Just ix ->
       pure ix
+
+declareFuncType :: forall name. FuncType -> Builder name TypeIdx
+declareFuncType ty = do
+  let funcTy = [ { final: true, supertypes: [], ty: CompFunc ty } ]
+  declareType funcTy
 
 nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
@@ -179,7 +184,7 @@ declareFunc
   -> FuncType
   -> Builder name (Array ValType -> Expr -> Builder name Unit)
 declareFunc name ty = do
-  tyIndex <- declareType ty
+  tyIndex <- declareFuncType ty
   index <- nextFuncIdx
   mkBuilder \{ funcs } -> do
     fs <- Ref.read funcs

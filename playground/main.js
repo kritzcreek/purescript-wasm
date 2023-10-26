@@ -1,6 +1,12 @@
 import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
-const program = `
+const mainProgram = `
+fn main() : i32 = {
+  20
+}
+`
+
+const canvasProgram = `
 import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
@@ -67,6 +73,7 @@ function draw_line(startx, starty, endx, endy) {
 
 let tick = () => {}
 let autoRecompile = true
+let useCanvas = true
 
 function setInfo(text) {
   document.getElementById("info-box").innerText = text
@@ -85,8 +92,6 @@ function setEditorContent(text) {
 function getEditorContent() {
   return editor.getValue()
 }
-
-setEditorContent(program)
 
 document.getElementById("stopBtn").onclick = function(e) {
   e.preventDefault()
@@ -112,6 +117,21 @@ document.getElementById("toggleAuto").onclick = function(e) {
   document.getElementById("toggleAuto").innerText = autoRecompile ? "Recompile: On" : "Recompile: Off";
 }
 
+document.getElementById("toggleCanvas").onclick = function(e) {
+  e.preventDefault()
+  e.stopPropagation()
+
+  useCanvas = !useCanvas
+
+  if (useCanvas) {
+    setEditorContent(canvasProgram)
+    document.getElementById("toggleCanvas").innerText = "Use canvas: On"
+  } else {
+    setEditorContent(mainProgram)
+    document.getElementById("toggleCanvas").innerText = "Use canvas: Off"
+  }
+}
+
 function runCompiler(text) {
   setInfo("")
   let renamed;
@@ -129,23 +149,13 @@ function runCompiler(text) {
   return { renamed, compiled }
 }
 
-async function instantiateWasm(compiledWasm) {
+async function instantiateWasm(compiledWasm, imports) {
   try {
-    const imports = {
-      env: {
-        draw_line: draw_line,
-        clear_canvas: clearCanvas
-      }
-    }
-    const obj = await WebAssembly.instantiate(compiledWasm, imports)
-    return (elapsed) => {
-      obj.instance.exports.tick(elapsed)
-    }
+    const inst = await WebAssembly.instantiate(compiledWasm, imports)
+    return inst.instance
   } catch(err) {
     appendInfo("Failed to instantiate wasm with: " + err)
   }
-
-  runCompiler(getEditorContent())
 }
 
 let previousTimeStamp;
@@ -165,32 +175,49 @@ function restartRender() {
     appendInfo(renamed)
   }
   if (compiled) {
-    instantiateWasm(compiled).then(newTick => {
+    const imports = {
+      env: {
+        draw_line: draw_line,
+        clear_canvas: clearCanvas
+      }
+    }
+    instantiateWasm(compiled, imports).then(inst => {
       clearCanvas()
-      tick = newTick
+      tick = (elapsed) => inst.exports.tick(elapsed)
     }).then(() => {
       requestAnimationFrame(render)
     })
   }
 }
 
+function runStaticWasm() {
+  const { renamed, compiled } = runCompiler(getEditorContent())
+  if (renamed) {
+    appendInfo(renamed)
+  }
+  if (compiled) {
+    instantiateWasm(compiled, {}).then(inst => {
+      const result = inst.exports.main();
+      appendInfo("Run result: " + result)
+    }).catch(err => {
+      appendInfo("Failed to run wasm: " + err.toString())
+    })
+  }
+}
+
+
 restartRender()
 
 async function runPlayground() {
   editor.session.on('change', () => {
     if (autoRecompile) {
-      restartRender()
+      if (useCanvas) {
+        restartRender()
+      } else {
+        runStaticWasm()
+      }
     }
   });
-}
-
-async function runStaticWasm() {
-  async function initWasm() {
-    const obj = await WebAssembly.instantiateStreaming(fetch("bytes.wasm"), {})
-    setInfo(obj.instance.exports.main())
-  }
-
-  initWasm()
 }
 
 runPlayground()

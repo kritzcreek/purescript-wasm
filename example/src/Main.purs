@@ -31,33 +31,9 @@ runWasm = runEffectFn1 runWasmImpl
 input :: String
 input =
   """
-import draw_line : (i32, i32, i32, i32) -> i32 from draw_line
-import clear : () -> i32 from clear_canvas
-
-let x = 0;
-let y = 500;
-
-fn max(x : i32, y : i32) : i32 =
-  if x > y {
-    x
-  } else {
-    y
-  }
-
-fn min(x : i32, y : i32) : i32 =
-  if x < y {
-    x
-  } else {
-    y
-  }
-
-fn clamp(lo : i32, x : i32, hi : i32) : i32 = min(hi, max(lo, x))
-
-fn tick() = {
-  clear();
-  set x = clamp(0, x + 5, 500);
-  set y = clamp(0, y - 10, 500);
-  draw_line(0, 0, x, y)
+fn main() : i32 = {
+  let x = [1];
+  20
 }
 """
 

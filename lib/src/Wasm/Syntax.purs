@@ -8,7 +8,11 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.String as String
 
-data RefType = NullFuncRef | FuncRef | ExternRef | HeapTypeRef Boolean HeapType
+data RefType
+  = NullFuncRef
+  | FuncRef
+  | ExternRef
+  | HeapTypeRef Boolean HeapType
 
 derive instance eqRefType :: Eq RefType
 derive instance ordRefType :: Ord RefType

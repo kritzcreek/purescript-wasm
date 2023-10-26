@@ -35,28 +35,48 @@ i32 = S.NumType S.I32
 f32 :: S.ValType
 f32 = S.NumType S.F32
 
-typeOf :: CExpr -> S.ValType
-typeOf e = case Types.typeOf e of
-  Types.TyI32 -> i32
-  Types.TyF32 -> f32
-  Types.TyBool -> i32
-  Types.TyUnit -> i32
-  Types.TyArray _ -> unsafeCrashWith "Can't produce a ValType for ArrayTy"
+typeOf :: CExpr -> Builder S.ValType
+typeOf e = valTy (Types.typeOf e)
 
-convertValTy :: Ast.ValTy -> S.ValType
-convertValTy = case _ of
-  Ast.TyI32 -> i32
-  Ast.TyF32 -> f32
-  Ast.TyBool -> i32
-  Ast.TyUnit -> i32
-  Ast.TyArray _ -> unsafeCrashWith "Can't produce a ValType for ArrayTy"
+astValTy :: Ast.ValTy -> Builder S.ValType
+astValTy t = valTy (Types.convertTy t)
 
-convertFuncTy :: Ast.FuncTy -> S.FuncType
-convertFuncTy = case _ of
-  Ast.FuncTy arguments result ->
-    { arguments: map convertValTy arguments
-    , results: [ convertValTy result ]
-    }
+valTy :: Types.Ty -> Builder S.ValType
+valTy = case _ of
+  Types.TyI32 -> pure i32
+  Types.TyF32 -> pure f32
+  Types.TyBool -> pure i32
+  Types.TyUnit -> pure i32
+  Types.TyArray t -> do
+    elTy <- valTyToSubTy t
+    ix <- Builder.declareType
+      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+    pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
+
+astFuncTy :: Ast.FuncTy -> Builder S.FuncType
+astFuncTy ty = funcTy (Types.convertFuncTy ty)
+
+funcTy :: Types.FuncTy -> Builder S.FuncType
+funcTy = case _ of
+  Types.FuncTy arguments result -> do
+    arguments' <- traverse valTy arguments
+    result' <- valTy result
+    pure
+      { arguments: arguments'
+      , results: [ result' ]
+      }
+
+valTyToSubTy :: Types.Ty -> Builder S.ValType
+valTyToSubTy = case _ of
+  Types.TyI32 -> pure i32
+  Types.TyF32 -> pure f32
+  Types.TyBool -> pure i32
+  Types.TyUnit -> pure i32
+  Types.TyArray t -> do
+    elTy <- valTyToSubTy t
+    ix <- Builder.declareType
+      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+    pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
 
 compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
@@ -66,7 +86,8 @@ compileProgram toplevels = Builder.build' do
 declareToplevel :: CToplevel -> Builder (Maybe FillFunc)
 declareToplevel = case _ of
   Ast.TopLet name init -> do
-    _ <- Builder.declareGlobal name { mutability: S.Var, type: typeOf init } (compileConst init)
+    ty <- typeOf init
+    _ <- Builder.declareGlobal name { mutability: S.Var, type: ty } (compileConst init)
     pure Nothing
   Ast.TopFunc func -> do
     result <- declareFunc func
@@ -75,7 +96,7 @@ declareToplevel = case _ of
       Just exportName -> Builder.declareExport func.name exportName
     pure (Just result)
   Ast.TopImport name ty externalName -> do
-    tyIdx <- Builder.declareType (convertFuncTy ty)
+    tyIdx <- Builder.declareFuncType =<< astFuncTy ty
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
 
@@ -136,7 +157,8 @@ compileExpr expr = case expr.expr of
     cond' <- compileExpr cond
     t' <- compileExpr t
     e' <- compileExpr e
-    in cond' <> [ S.If (S.BlockValType (Just (typeOf t))) t' e' ]
+    ty <- Builder.liftBuilder (typeOf t)
+    in cond' <> [ S.If (S.BlockValType (Just ty)) t' e' ]
   Ast.CallE fn args -> do
     args' <- traverse compileExpr args
     call <- Builder.liftBuilder do
@@ -146,14 +168,20 @@ compileExpr expr = case expr.expr of
     pure (Array.fold args' <> [ call ])
   Ast.BlockE body -> compileBlock body
   Ast.ArrayE elements -> do
-    let
-      elTy = case expr.note of
-        Types.TyArray t -> t
-        _ -> unsafeCrashWith "non-array type inferred for array literal"
-    compileArray elTy elements
+    compileArray expr.note elements
+
+declareArrayType :: Types.Ty -> Builder S.TypeIdx
+declareArrayType = case _ of
+  Types.TyArray t -> do
+    elTy <- valTy t
+    Builder.declareType [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+  _ -> unsafeCrashWith "non-array type for array literal"
 
 compileArray :: Types.Ty -> Array CExpr -> BodyBuilder S.Expr
-compileArray _elTy _elements = unsafeCrashWith "No codegen for arrays yet"
+compileArray ty elements = do
+  tyIdx <- Builder.liftBuilder (declareArrayType ty)
+  is <- traverse compileExpr elements
+  pure (Array.fold is <> [ S.ArrayNewFixed tyIdx (Array.length elements) ])
 
 compileBlock
   :: Array CDecl
@@ -173,7 +201,8 @@ compileBlock decls = do
       is <- compileExpr expr
       pure (is <> [ S.Drop ])
     Ast.LetD n e -> do
-      var <- Builder.newLocal n (typeOf e)
+      ty <- Builder.liftBuilder (typeOf e)
+      var <- Builder.newLocal n ty
       is <- compileExpr e
       pure (is <> [ S.LocalSet var ])
     Ast.SetD n e -> do
@@ -186,15 +215,12 @@ compileBlock decls = do
 
 declareFunc :: CFunc -> Builder FillFunc
 declareFunc func = do
-  fill <- Builder.declareFunc
-    func.name
-    { arguments: map (\p -> convertValTy p.ty) func.params
-    , results: [ convertValTy func.returnTy ]
-    }
+  fTy <- astFuncTy (Ast.funcTyOf func)
+  fill <- Builder.declareFunc func.name fTy
   pure { fill, func }
 
 implFunc :: FillFunc -> Builder Unit
 implFunc { fill, func } = do
-  let paramTys = map (\v -> Tuple v.name (convertValTy v.ty)) func.params
+  paramTys <- traverse (\v -> map (Tuple v.name) (astValTy v.ty)) func.params
   fnBody <- bodyBuild paramTys (compileExpr func.body)
   fill fnBody.locals fnBody.result

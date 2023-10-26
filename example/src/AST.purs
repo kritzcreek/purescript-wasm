@@ -55,6 +55,9 @@ type Func note name =
   , body :: Expr note name
   }
 
+funcTyOf :: forall note name. Func note name -> FuncTy
+funcTyOf { params, returnTy } = FuncTy (map _.ty params) returnTy
+
 data Toplevel note name
   = TopFunc (Func note name)
   | TopLet name (Expr note name)
