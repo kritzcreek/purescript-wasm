@@ -3,7 +3,12 @@
     padding: 0;
 }
 
+:root {
+  font-size: 18px
+}
+
 button {
+    font-size: 1rem;
     padding: 0.5rem 1rem;
 }
 
@@ -20,6 +25,7 @@ button {
 }
 
 #editor {
+    font-size: 1rem;
     width: 100%;
     flex: 1 1 auto;
 }

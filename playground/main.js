@@ -1,14 +1,18 @@
 import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
-const mainProgram = `
+
+function mainProgram() {
+  return localStorage.getItem("mainProgram") ?? `
 fn main() : i32 = {
   let x = [1, 2, 3];
   let y = [x, x];
   x[0] + y[0][1]
 }
-`
+`.trim()
+}
 
-const canvasProgram = `
+function canvasProgram() {
+  return localStorage.getItem("canvasProgram") ?? `
 import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
@@ -54,6 +58,7 @@ fn tick(elapsed_time_ms : f32) : i32 = {
   draw_cube(x, y, 20.0)
 }
 `.trim();
+}
 
 const canvas = document.getElementById("canvas");
 /**
@@ -81,6 +86,11 @@ function setInfo(text) {
   document.getElementById("info-box").innerText = text
 }
 
+function prependInfo(text) {
+  const old = document.getElementById("info-box").innerText
+  document.getElementById("info-box").innerText = text + "\n" + old
+}
+
 function appendInfo(text) {
   document.getElementById("info-box").innerText += "\n" + text
 }
@@ -88,11 +98,15 @@ function appendInfo(text) {
 const editor = ace.edit("editor");
 
 function setEditorContent(text) {
-  editor.setValue(text);
+  editor.session.setValue(text);
 }
 
 function getEditorContent() {
   return editor.getValue()
+}
+
+function stopRender() {
+  tick = undefined
 }
 
 document.getElementById("stopBtn").onclick = function(e) {
@@ -100,7 +114,7 @@ document.getElementById("stopBtn").onclick = function(e) {
   e.stopPropagation()
 
   console.log("Stopping")
-  tick = undefined
+  stopRender()
 }
 
 document.getElementById("startBtn").onclick = function(e) {
@@ -116,6 +130,7 @@ document.getElementById("toggleAuto").onclick = function(e) {
   e.stopPropagation()
 
   autoRecompile = !autoRecompile
+  localStorage.setItem("autoRecompile", autoRecompile)
   document.getElementById("toggleAuto").innerText = autoRecompile ? "Recompile: On" : "Recompile: Off";
 }
 
@@ -124,12 +139,15 @@ document.getElementById("toggleCanvas").onclick = function(e) {
   e.stopPropagation()
 
   useCanvas = !useCanvas
+  localStorage.setItem("useCanvas", useCanvas)
 
   if (useCanvas) {
-    setEditorContent(canvasProgram)
+    setEditorContent(canvasProgram())
     document.getElementById("toggleCanvas").innerText = "Use canvas: On"
   } else {
-    setEditorContent(mainProgram)
+    clearCanvas()
+    stopRender()
+    setEditorContent(mainProgram())
     document.getElementById("toggleCanvas").innerText = "Use canvas: Off"
   }
 }
@@ -200,26 +218,41 @@ function runStaticWasm() {
   if (compiled) {
     instantiateWasm(compiled, {}).then(inst => {
       const result = inst.exports.main();
-      appendInfo("Run result: " + result)
+      prependInfo("Run result: " + result)
     }).catch(err => {
       appendInfo("Failed to run wasm: " + err.toString())
     })
   }
 }
 
-
-restartRender()
-
-async function runPlayground() {
+async function watchEditor() {
   editor.session.on('change', () => {
-    if (autoRecompile) {
-      if (useCanvas) {
+    if (useCanvas) {
+      localStorage.setItem("canvasProgram", getEditorContent())
+      if (autoRecompile) {
         restartRender()
-      } else {
+      }
+    } else {
+      localStorage.setItem("mainProgram", getEditorContent())
+      if (autoRecompile) {
         runStaticWasm()
       }
     }
   });
 }
 
-runPlayground()
+function loadSettings() {
+  autoRecompile = JSON.parse(localStorage.getItem("autoRecompile") ?? "true")
+  useCanvas = JSON.parse(localStorage.getItem("useCanvas" ?? "true"))
+}
+
+loadSettings()
+setEditorContent(useCanvas ? canvasProgram() : mainProgram())
+
+if (useCanvas) {
+  restartRender()
+} else {
+  runStaticWasm()
+}
+
+watchEditor()
