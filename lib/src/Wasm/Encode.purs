@@ -92,6 +92,10 @@ withSize b f = do
 write_u32 :: DBuffer -> Int -> Effect Unit
 write_u32 = unsigned_leb128
 
+-- Not sure if this is correct
+write_s33 :: DBuffer -> Int -> Effect Unit
+write_s33 = signed_leb128
+
 write_vec :: DBuffer -> Array (Effect Unit) -> Effect Unit
 write_vec b elements = do
   write_u32 b (Array.length elements)
@@ -111,18 +115,63 @@ write_value_type b = case _ of
   S.NumType ty -> write_num_type b ty
   S.RefType ty -> write_ref_type b ty
 
+write_packed_type :: DBuffer -> S.PackedType -> Effect Unit
+write_packed_type b = case _ of
+  S.I8 ->
+    DBuffer.addByte b 0x78
+  S.I16 ->
+    DBuffer.addByte b 0x77
+
 write_result_type :: DBuffer -> S.ResultType -> Effect Unit
 write_result_type b ty = write_vec b (map (write_value_type b) ty)
 
 write_func_type :: DBuffer -> S.FuncType -> Effect Unit
 write_func_type b { arguments, results } = do
-  DBuffer.addByte b 0x60
   write_result_type b arguments
   write_result_type b results
 
-write_type_section :: DBuffer -> Array S.FuncType -> Effect Unit
+write_storage_type :: DBuffer -> S.StorageType -> Effect Unit
+write_storage_type b = case _ of
+  S.StorageVal t -> write_value_type b t
+  S.StoragePacked t -> write_packed_type b t
+
+write_field_type :: DBuffer -> S.FieldType -> Effect Unit
+write_field_type b { mutability, ty } = do
+  write_storage_type b ty
+  write_mutability b mutability
+
+write_comp_type :: DBuffer -> S.CompositeType -> Effect Unit
+write_comp_type b = case _ of
+  S.CompFunc t -> do
+    DBuffer.addByte b 0x60
+    write_func_type b t
+  S.CompStruct ts -> do
+    DBuffer.addByte b 0x5F
+    write_vec b (map (write_field_type b) ts)
+  S.CompArray t -> do
+    DBuffer.addByte b 0x5E
+    write_field_type b t
+
+write_sub_type :: DBuffer -> S.SubType -> Effect Unit
+write_sub_type b = case _ of
+  { final: true, supertypes: [], ty } ->
+    write_comp_type b ty
+  { final, supertypes, ty } -> do
+    DBuffer.addByte b (if final then 0x4F else 0x50)
+    write_vec b (map (write_u32 b) supertypes)
+    write_comp_type b ty
+
+write_rec_type :: DBuffer -> S.RecType -> Effect Unit
+write_rec_type b = case _ of
+  [] -> pure unit
+  [ ty ] -> write_sub_type b ty
+  tys -> do
+    DBuffer.addByte b 0x4E
+    write_vec b (map (write_sub_type b) tys)
+
+write_type_section :: DBuffer -> Array S.RecType -> Effect Unit
 write_type_section b types = write_section b 1 do
-  write_vec b (map (write_func_type b) types)
+  write_vec b (map (write_rec_type b) types)
 
 write_function_section :: DBuffer -> Array S.Func -> Effect Unit
 write_function_section b funcs = write_section b 3 do
@@ -266,12 +315,73 @@ write_instr b = case _ of
     DBuffer.addByte b 0xB3
   S.RefNull t -> do
     DBuffer.addByte b 0xD0
-    write_ref_type b t
+    write_heap_type b t
   S.RefIsNull ->
     DBuffer.addByte b 0xD1
   S.RefFunc idx -> do
     DBuffer.addByte b 0xD2
     write_u32 b idx
+  S.ArrayNew x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 6
+    write_u32 b x
+  S.ArrayNewDefault x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 7
+    write_u32 b x
+  S.ArrayNewFixed x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 8
+    write_u32 b x
+    write_u32 b y
+  S.ArrayNewData x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 9
+    write_u32 b x
+    write_u32 b y
+  S.ArrayNewElem x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 10
+    write_u32 b x
+    write_u32 b y
+  S.ArrayGet x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 11
+    write_u32 b x
+  S.ArrayGet_s x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 12
+    write_u32 b x
+  S.ArrayGet_u x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 13
+    write_u32 b x
+  S.ArraySet x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 14
+    write_u32 b x
+  S.ArrayLen -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 15
+  S.ArrayFill x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 16
+    write_u32 b x
+  S.ArrayCopy x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 17
+    write_u32 b x
+    write_u32 b y
+  S.ArrayInitData x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 18
+    write_u32 b x
+    write_u32 b y
+  S.ArrayInitElem x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 19
+    write_u32 b x
+    write_u32 b y
   S.Drop ->
     DBuffer.addByte b 0x1A
   S.Select m_tys -> case m_tys of
@@ -410,6 +520,13 @@ write_ref_type b = case _ of
   S.NullFuncRef -> signed_leb128 b (-0x0d)
   S.FuncRef -> DBuffer.addByte b 0x70
   S.ExternRef -> DBuffer.addByte b 0x6F
+  S.HeapTypeRef nullable t -> do
+    DBuffer.addByte b (if nullable then 0x63 else 0x64)
+    write_heap_type b t
+
+write_heap_type :: DBuffer -> S.HeapType -> Effect Unit
+write_heap_type b = case _ of
+  S.IndexHt ix -> write_s33 b ix
 
 write_table_type :: DBuffer -> S.TableType -> Effect Unit
 write_table_type b { limits, elemtype } = do
@@ -563,7 +680,7 @@ write_elem_section b elems = write_section b 9 do
 
 write_locals :: DBuffer -> Array S.ValType -> Array (Effect Unit)
 write_locals b locals = do
-  let grouped = Array.groupAll locals
+  let grouped = Array.group locals
   map
     ( \tys -> do
         write_u32 b (NEA.length tys)
@@ -582,10 +699,10 @@ write_code_section b funcs = write_section b 10 do
 
 write_data :: DBuffer -> S.Data -> Effect Unit
 write_data b dat = case dat.mode of
-  Passive -> do
+  DataPassive -> do
     DBuffer.addByte b 0x01
     write_vec b (map (DBuffer.addByte b) dat.init)
-  Active { memory, offset }
+  DataActive { memory, offset }
     | memory == 0 -> do
         DBuffer.addByte b 0x00
         write_expr b offset

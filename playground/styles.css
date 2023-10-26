@@ -1,0 +1,65 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+  font-size: 18px
+}
+
+button {
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+}
+
+#container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+}
+
+#playground {
+    display: flex;
+    height: 70%;
+}
+
+#editor {
+    font-size: 1rem;
+    width: 100%;
+    flex: 1 1 auto;
+}
+
+#canvas-container {
+    display: flex;
+    flex: 1 0 auto;
+    width: 500px;
+    height: 100%;
+    margin: 1rem;
+}
+
+#canvas {
+    border: 1px solid black;
+    flex: auto;
+    position: relative;
+    left: 0;
+    top: 0;
+    width: 500px;
+    height: 500px;
+}
+
+#debug {
+    display: flex;
+    height: 30%;
+    border-top: 1px solid black;
+}
+
+#info-box {
+    flex: 1 1 auto;
+    overflow-y: scroll;
+    padding-left: 1rem;
+}
+
+#options-box {
+    flex: 1 1 auto;
+}

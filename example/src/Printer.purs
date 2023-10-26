@@ -2,7 +2,7 @@ module Printer (printFuncs, printProgram, printExpr, printDecl, renderAll, rende
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
 import Data.Array as Array
 import Data.Map (Map)
 import Data.Map as Map
@@ -88,17 +88,30 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
       <+> renderExpr renderOptions e
   CallE func args ->
     renderOptions.renderName func <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
+  IntrinsicE i args ->
+    text (show i) <> parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) args))
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
+  ArrayE elements ->
+    brackets (D.foldWithSeparator (text "," <> break) (map (renderExpr renderOptions) elements))
+  ArrayIdxE array index ->
+    renderExpr renderOptions array <> brackets (renderExpr renderOptions index)
 
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of
   LetD name expr ->
-    (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
-  SetD name expr ->
-    (text "set" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
+    (text "let" <+> renderOptions.renderName name <+> text "=") </> indent (renderExpr renderOptions expr)
+  SetD setTarget expr ->
+    (text "set" <+> renderSetTarget renderOptions setTarget <+> text "=") </> renderExpr renderOptions expr
   ExprD expr ->
     renderExpr renderOptions expr
+
+renderSetTarget :: forall a note name. RenderOptions note name a -> SetTarget note name -> Doc a
+renderSetTarget renderOptions = case _ of
+  VarST n ->
+    renderOptions.renderName n
+  ArrayIdxST n ix ->
+    renderOptions.renderName n <> brackets (renderExpr renderOptions ix)
 
 renderFunc :: forall a note name. RenderOptions note name a -> Func note name -> Doc a
 renderFunc renderOptions func = do
@@ -122,6 +135,7 @@ renderValTy = case _ of
   TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
+  TyArray t -> text "[" <> renderValTy t <> text "]"
 
 renderFuncTy :: forall a. FuncTy -> Doc a
 renderFuncTy = case _ of
@@ -146,6 +160,12 @@ curlies = flexGroup <<< encloseEmptyAlt open close (text "{}") <<< indent
   where
   open = text "{" <> break
   close = break <> text "}"
+
+brackets :: forall a. Doc a -> Doc a
+brackets = flexGroup <<< encloseEmptyAlt open close (text "[]") <<< indent
+  where
+  open = text "[" <> D.softBreak
+  close = D.softBreak <> text "]"
 
 parensIndent :: forall a. Doc a -> Doc a
 parensIndent = flexGroup <<< encloseEmptyAlt open close (text "()") <<< indent

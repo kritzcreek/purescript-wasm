@@ -5,16 +5,19 @@ module WasmBuilder
   , bodyBuild
   , build
   , build'
+  , lookupFunc
   , callFunc
   , callImport
+  , declareType
+  , declareFuncType
   , declareExport
   , declareFunc
   , declareGlobal
   , declareImport
+  , declareStart
   , lookupGlobal
-  , declareType
   , newLocal
-  , getLocal
+  , lookupLocal
   , liftBuilder
   ) where
 
@@ -39,7 +42,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, TypeIdx, ValType, emptyModule)
+import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
 
 -- - Define functions
 -- - Define globals
@@ -69,10 +72,11 @@ type Env name =
   , funcsSupply :: Ref Int
   , globals :: Ref (Map name GlobalData)
   , globalsSupply :: Ref Int
-  , types :: Ref (Array FuncType)
+  , types :: Ref (Array RecType)
   , memory :: Ref (Maybe Memory)
   , imports :: Ref (Map name ImportData)
   , exports :: Ref (Array Export)
+  , startFn :: Ref (Maybe FuncIdx)
   }
 
 initialEnv :: forall name. Effect (Env name)
@@ -85,7 +89,8 @@ initialEnv = ado
   types <- Ref.new []
   memory <- Ref.new Nothing
   exports <- Ref.new []
-  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports }
+  startFn <- Ref.new Nothing
+  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports, startFn }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -99,7 +104,7 @@ derive newtype instance MonadEffect (Builder name) -- Remove as this is unsafe
 mkBuilder :: forall name a. (Env name -> Effect a) -> Builder name a
 mkBuilder act = Builder (ReaderT act)
 
-declareType :: forall name. FuncType -> Builder name TypeIdx
+declareType :: forall name. RecType -> Builder name TypeIdx
 declareType ty = mkBuilder \{ types } -> do
   ts <- Ref.read types
   case Array.findIndex (_ == ty) ts of
@@ -108,6 +113,11 @@ declareType ty = mkBuilder \{ types } -> do
       pure (Array.length ts)
     Just ix ->
       pure ix
+
+declareFuncType :: forall name. FuncType -> Builder name TypeIdx
+declareFuncType ty = do
+  let funcTy = [ { final: true, supertypes: [], ty: CompFunc ty } ]
+  declareType funcTy
 
 nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
@@ -178,7 +188,7 @@ declareFunc
   -> FuncType
   -> Builder name (Array ValType -> Expr -> Builder name Unit)
 declareFunc name ty = do
-  tyIndex <- declareType ty
+  tyIndex <- declareFuncType ty
   index <- nextFuncIdx
   mkBuilder \{ funcs } -> do
     fs <- Ref.read funcs
@@ -210,6 +220,13 @@ declareExport name exportName = do
     Ref.modify_
       (\es -> Array.snoc es { name: exportName, desc: ExportFunc index })
       exports
+
+declareStart :: forall name. Show name => Ord name => name -> Builder name Unit
+declareStart name = do
+  index <- lookupFunc name
+  mkBuilder \({ startFn }) ->
+    -- TODO: Error on double declaring start
+    Ref.write (Just index) startFn
 
 data BuildError name = MissingBody name
 
@@ -264,6 +281,7 @@ buildModule env@{ types, memory, exports } = do
   imps <- buildImports env
   mem <- Ref.read memory
   exps <- Ref.read exports
+  startFn <- Ref.read env.startFn
   buildFuncs env <#> case _ of
     Left err ->
       Left err
@@ -276,6 +294,7 @@ buildModule env@{ types, memory, exports } = do
             , memories = Array.fromFoldable mem
             , exports = exps
             , imports = imps
+            , start = startFn
             }
         )
 
@@ -347,13 +366,13 @@ newLocal name ty = do
     Ref.modify_ (Map.insert name { index, ty }) locals
     pure index
 
-getLocal
+lookupLocal
   :: forall name
    . Show name
   => Ord name
   => name
   -> BodyBuilder name LocalIdx
-getLocal name = do
+lookupLocal name = do
   mkBodyBuilder \{ locals } -> liftEffect do
     ls <- Ref.read locals
     case Map.lookup name ls of

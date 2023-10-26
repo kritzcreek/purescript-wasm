@@ -21,7 +21,8 @@ compileProgram input = do
         Left err -> unsafeCrashWith ("Failed to typecheck with: " <> err)
         Right typed -> do
           let { result } = Rename.renameProgram typed
-          Encode.encodeModule (Compiler.compileProgram result)
+          let compiled = Compiler.compileProgram result
+          Encode.encodeModule compiled
 
 renameProgram :: String -> String
 renameProgram input =

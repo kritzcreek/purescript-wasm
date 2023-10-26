@@ -8,7 +8,11 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.String as String
 
-data RefType = NullFuncRef | FuncRef | ExternRef
+data RefType
+  = NullFuncRef
+  | FuncRef
+  | ExternRef
+  | HeapTypeRef Boolean HeapType
 
 derive instance eqRefType :: Eq RefType
 derive instance ordRefType :: Ord RefType
@@ -17,6 +21,59 @@ instance showRefType :: Show RefType where
     NullFuncRef -> "nullfuncref"
     FuncRef -> "funcref"
     ExternRef -> "externref"
+    HeapTypeRef null ix -> "ref " <> (if null then "null " else "") <> show ix
+
+data HeapType = IndexHt TypeIdx
+
+derive instance Eq HeapType
+derive instance Ord HeapType
+instance Show HeapType where
+  show = case _ of
+    IndexHt ix -> show ix
+
+data PackedType = I8 | I16
+
+derive instance Eq PackedType
+derive instance Ord PackedType
+instance Show PackedType where
+  show = case _ of
+    I8 -> "i8"
+    I16 -> "i16"
+
+data StorageType = StorageVal ValType | StoragePacked PackedType
+
+derive instance Eq StorageType
+derive instance Ord StorageType
+instance Show StorageType where
+  show = case _ of
+    StorageVal t -> show t
+    StoragePacked t -> show t
+
+type FieldType =
+  { mutability :: Mutability
+  , ty :: StorageType
+  }
+
+type StructType = Array FieldType
+type ArrayType = FieldType
+
+data CompositeType = CompFunc FuncType | CompStruct StructType | CompArray ArrayType
+
+derive instance Eq CompositeType
+derive instance Ord CompositeType
+instance Show CompositeType where
+  show = case _ of
+    CompFunc t -> show t
+    CompStruct t -> "(struct " <> show t <> ")"
+    CompArray t -> "(array " <> show t <> ")"
+
+type RecType = Array SubType
+
+type SubType =
+  { final :: Boolean
+  , supertypes :: Array TypeIdx
+  , ty :: CompositeType
+  }
 
 data NumType = I32 | I64 | F32 | F64
 
@@ -53,12 +110,12 @@ type FuncIdx = Int
 type MemoryIdx = Int
 type TableIdx = Int
 type DataIdx = Int
+type ElemIdx = Int
 
 type Expr = Array Instruction
 
 type MemArg = { offset :: Int, align :: Int }
 
--- TODO: Add Instructions for non-I32s as well as cvtops
 data Instruction
   = I32Const Int
   | I32Clz
@@ -124,9 +181,25 @@ data Instruction
   | F32ConvertI32_u
 
   -- Reference instructions
-  | RefNull RefType
+  | RefNull HeapType
   | RefIsNull
   | RefFunc FuncIdx
+
+  -- Aggregate Instructions
+  | ArrayNew TypeIdx
+  | ArrayNewFixed TypeIdx Int
+  | ArrayNewDefault TypeIdx
+  | ArrayNewData TypeIdx DataIdx
+  | ArrayNewElem TypeIdx ElemIdx
+  | ArrayGet TypeIdx
+  | ArrayGet_s TypeIdx
+  | ArrayGet_u TypeIdx
+  | ArraySet TypeIdx
+  | ArrayLen
+  | ArrayFill TypeIdx
+  | ArrayCopy TypeIdx TypeIdx
+  | ArrayInitData TypeIdx DataIdx
+  | ArrayInitElem TypeIdx ElemIdx
 
   -- Parametric Instructions
   | Drop
@@ -168,7 +241,9 @@ data Instruction
   | Call FuncIdx
   | Call_Indirect TypeIdx
 
-instance showInstruction :: Show Instruction where
+derive instance Eq Instruction
+derive instance Ord Instruction
+instance Show Instruction where
   show = case _ of
     I32Const x -> "i32.const " <> show x
     I32Clz -> "i32.clz"
@@ -232,6 +307,20 @@ instance showInstruction :: Show Instruction where
     RefNull x -> "ref.null " <> show x
     RefIsNull -> "ref.is_null"
     RefFunc x -> "ref.func " <> show x
+    ArrayNew x -> "array.new " <> show x
+    ArrayNewFixed x y -> "array.new_fixed " <> show x <> " " <> show y
+    ArrayNewDefault x -> "array.new_default " <> show x
+    ArrayNewData x y -> "array.new_data " <> show x <> " " <> show y
+    ArrayNewElem x y -> "array.new_elem " <> show x <> " " <> show y
+    ArrayGet x -> "array.get " <> show x
+    ArrayGet_s x -> "array.get_s " <> show x
+    ArrayGet_u x -> "array.get_u " <> show x
+    ArraySet x -> "array.set " <> show x
+    ArrayLen -> "array.len"
+    ArrayFill x -> "array.fill " <> show x
+    ArrayCopy x y -> "array.copy " <> show x <> " " <> show y
+    ArrayInitData x y -> "array.init_data " <> show x <> " " <> show y
+    ArrayInitElem x y -> "array.init_elem " <> show x <> " " <> show y
     Drop -> "drop"
     Select Nothing -> "select"
     Select (Just tys) -> "select " <> String.joinWith " " (map show tys)
@@ -268,6 +357,8 @@ instance showInstruction :: Show Instruction where
 
 data BlockType = BlockTypeIdx TypeIdx | BlockValType (Maybe ValType)
 
+derive instance Eq BlockType
+derive instance Ord BlockType
 instance showBlockType :: Show BlockType where
   show = case _ of
     BlockTypeIdx x -> show x
@@ -298,6 +389,8 @@ type Memory =
 
 data Mutability = Const | Var
 
+derive instance Eq Mutability
+derive instance Ord Mutability
 instance showMutability :: Show Mutability where
   show = case _ of
     Const -> "const"
@@ -324,6 +417,14 @@ data ElemMode
   | ElemDeclarative
   | ElemActive { table :: TableIdx, offset :: Expr }
 
+derive instance Eq ElemMode
+derive instance Ord ElemMode
+instance Show ElemMode where
+  show = case _ of
+    ElemPassive -> "passive"
+    ElemDeclarative -> "declarative"
+    ElemActive { table, offset } -> "active " <> show table <> " " <> show offset
+
 type Byte = Int
 type Data =
   { mode :: DataMode
@@ -331,8 +432,15 @@ type Data =
   }
 
 data DataMode
-  = Passive
-  | Active { offset :: Expr, memory :: MemoryIdx }
+  = DataPassive
+  | DataActive { offset :: Expr, memory :: MemoryIdx }
+
+derive instance Eq DataMode
+derive instance Ord DataMode
+instance Show DataMode where
+  show = case _ of
+    DataPassive -> "passive"
+    DataActive { offset, memory } -> "active " <> show offset <> " " <> show memory
 
 type Name = String
 
@@ -374,7 +482,7 @@ type Export =
   }
 
 type Module =
-  { types :: Array FuncType
+  { types :: Array RecType
   , funcs :: Array Func
   , tables :: Array Table
   , memories :: Array Memory
