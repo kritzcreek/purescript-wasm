@@ -66,6 +66,13 @@ funcTy = case _ of
       , results: [ result' ]
       }
 
+declareArrayType :: Types.Ty -> Builder S.TypeIdx
+declareArrayType = case _ of
+  Types.TyArray t -> do
+    elTy <- valTy t
+    Builder.declareType [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+  _ -> unsafeCrashWith "non-array type for array literal"
+
 compileProgram :: CProgram -> S.Module
 compileProgram toplevels = Builder.build' do
   fills <- traverse declareToplevel toplevels
@@ -156,25 +163,14 @@ compileExpr expr = case expr.expr of
     pure (Array.fold args' <> [ call ])
   Ast.BlockE body -> compileBlock body
   Ast.ArrayE elements -> do
-    compileArray expr.note elements
+    tyIdx <- Builder.liftBuilder (declareArrayType expr.note)
+    is <- traverse compileExpr elements
+    pure (Array.fold is <> [ S.ArrayNewFixed tyIdx (Array.length elements) ])
   Ast.ArrayIdxE array idx -> do
     ty <- Builder.liftBuilder (declareArrayType array.note)
     arrayIs <- compileExpr array
     idxIs <- compileExpr idx
     pure (arrayIs <> idxIs <> [ S.ArrayGet ty ])
-
-declareArrayType :: Types.Ty -> Builder S.TypeIdx
-declareArrayType = case _ of
-  Types.TyArray t -> do
-    elTy <- valTy t
-    Builder.declareType [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
-  _ -> unsafeCrashWith "non-array type for array literal"
-
-compileArray :: Types.Ty -> Array CExpr -> BodyBuilder S.Expr
-compileArray ty elements = do
-  tyIdx <- Builder.liftBuilder (declareArrayType ty)
-  is <- traverse compileExpr elements
-  pure (Array.fold is <> [ S.ArrayNewFixed tyIdx (Array.length elements) ])
 
 compileBlock
   :: Array CDecl
