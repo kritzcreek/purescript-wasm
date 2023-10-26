@@ -220,7 +220,7 @@ function runStaticWasm() {
       const result = inst.exports.main();
       prependInfo("Run result: " + result)
     }).catch(err => {
-      appendInfo("Failed to run wasm: " + err.toString())
+      prependInfo("Failed to run wasm: " + err.toString())
     })
   }
 }
