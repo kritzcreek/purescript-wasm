@@ -2,7 +2,9 @@ import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
 const mainProgram = `
 fn main() : i32 = {
-  20
+  let x = [1, 2, 3];
+  let y = [x, x];
+  x[0] + y[0][1]
 }
 `
 

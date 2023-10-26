@@ -128,6 +128,10 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
   ArrayE els -> do
     els' <- traverse renameExpr els
     pure (ArrayE els')
+  ArrayIdxE arr idx -> do
+    arr' <- renameExpr arr
+    idx' <- renameExpr idx
+    pure (ArrayIdxE arr' idx')
 
 renameDecl
   :: forall note

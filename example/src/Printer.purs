@@ -92,6 +92,8 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
   ArrayE elements ->
     brackets (D.foldWithSeparator (text "," <> break) (map (renderExpr renderOptions) elements))
+  ArrayIdxE array index ->
+    renderExpr renderOptions array <> brackets (renderExpr renderOptions index)
 
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of

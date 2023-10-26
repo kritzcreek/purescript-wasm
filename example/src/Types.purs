@@ -66,6 +66,7 @@ checkTy = case _, _ of
   TyF32, TyF32 -> pure unit
   TyBool, TyBool -> pure unit
   TyUnit, TyUnit -> pure unit
+  TyArray t, TyArray t' -> checkTy t t'
   expected, actual -> Left ("Expected " <> show expected <> ", but got " <> show actual)
 
 checkTyNum :: Ty -> Either String Unit
@@ -144,6 +145,15 @@ inferExpr ctx expr = case expr.expr of
         let tyEl = typeOf el
         traverse_ (checkTy tyEl <<< typeOf) elements'
         pure { expr: Ast.ArrayE elements', note: TyArray tyEl }
+  Ast.ArrayIdxE arr idx -> do
+    arr' <- inferExpr ctx arr
+    idx' <- inferExpr ctx idx
+    case typeOf arr' of
+      TyArray tyEl -> do
+        checkTy TyI32 (typeOf idx')
+        pure { expr: Ast.ArrayIdxE arr' idx', note: tyEl }
+      _ -> do
+        Left ("Expected array type but got: " <> show (typeOf arr'))
 
 inferDecls :: forall note. Ctx -> Array (Ast.Decl note String) -> Either String { ty :: Ty, decls :: Array TypedDecl }
 inferDecls initialCtx initialDecls = do
@@ -166,7 +176,7 @@ inferDecls initialCtx initialDecls = do
     { ctx: initialCtx, decls: [] }
     initialDecls
   let
-    ty = case Array.last (result.decls) of
+    ty = case Array.last result.decls of
       Just (Ast.ExprD e) -> typeOf e
       _ -> TyUnit
   pure { ty, decls: result.decls }
@@ -196,6 +206,7 @@ inferToplevel ctx = case _ of
   Ast.TopFunc f -> do
     let ctx' = Array.foldl (\c param -> addVal param.name (convertTy param.ty) c) ctx f.params
     body <- inferExpr ctx' f.body
+    checkTy (convertTy f.returnTy) (typeOf body)
     pure
       { ctx
       , toplevel: Ast.TopFunc (f { body = body })

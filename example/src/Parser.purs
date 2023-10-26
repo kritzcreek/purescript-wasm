@@ -68,7 +68,17 @@ intLit = do
     Just n -> pure n
 
 expr1 :: Parser (Expr Unit String)
-expr1 = defer \_ -> block <|> atom
+expr1 = defer \_ -> block <|> expr2
+
+arrayIdx :: Expr Unit String -> Parser (Expr Unit String)
+arrayIdx e = C.optionMaybe (l.brackets expr) >>= case _ of
+  Nothing -> pure e
+  Just ix -> arrayIdx (noNote (ArrayIdxE e ix))
+
+expr2 :: Parser (Expr Unit String)
+expr2 = defer \_ -> do
+  e <- atom
+  arrayIdx e
 
 varOrCall :: Parser (Expr Unit String)
 varOrCall = defer \_ -> do

@@ -169,6 +169,11 @@ compileExpr expr = case expr.expr of
   Ast.BlockE body -> compileBlock body
   Ast.ArrayE elements -> do
     compileArray expr.note elements
+  Ast.ArrayIdxE array idx -> do
+    ty <- Builder.liftBuilder (declareArrayType array.note)
+    arrayIs <- compileExpr array
+    idxIs <- compileExpr idx
+    pure (arrayIs <> idxIs <> [ S.ArrayGet ty ])
 
 declareArrayType :: Types.Ty -> Builder S.TypeIdx
 declareArrayType = case _ of

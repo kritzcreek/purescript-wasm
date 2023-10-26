@@ -24,6 +24,7 @@ data Expr' note name
   = LitE Lit
   | VarE name
   | ArrayE (Array (Expr note name))
+  | ArrayIdxE (Expr note name) (Expr note name)
   | BinOpE Op (Expr note name) (Expr note name)
   | IfE (Expr note name) (Expr note name) (Expr note name)
   | CallE name (Array (Expr note name))
