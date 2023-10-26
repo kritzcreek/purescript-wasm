@@ -98,7 +98,7 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of
   LetD name expr ->
-    (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
+    (text "let" <+> renderOptions.renderName name <+> text "=") </> indent (renderExpr renderOptions expr)
   SetD name expr ->
     (text "set" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions expr
   ExprD expr ->

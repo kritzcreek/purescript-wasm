@@ -24,7 +24,7 @@ fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x + size, y + size, x + size, y)
 }
 
-fn tick(elapsed_time_ms : f32) = {
+fn tick(elapsed_time_ms : f32) : i32 = {
   let elapsed_factor = elapsed_time_ms / 32.0;
   set x = x + (vx * elapsed_factor);
   set y = y + (vy * elapsed_factor);
