@@ -7,7 +7,7 @@ import Prelude
 
 import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
-import Control.Lazy (fix)
+import Control.Lazy (defer, fix)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
 import Data.Either (Either)
@@ -110,14 +110,14 @@ decl :: Parser (Expr Unit String) -> Parser (Decl Unit String)
 decl e =
   LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e
     <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e
-    <|>
-      ExprD <$> e
+    <|> ExprD <$> e
 
 valTy :: Parser ValTy
-valTy =
+valTy = defer \_ ->
   l.reserved "i32" $> TyI32
     <|> l.reserved "f32" $> TyF32
     <|> l.reserved "bool" $> TyBool
+    <|> map TyArray (l.brackets valTy)
 
 funcTy :: Parser FuncTy
 funcTy = ado

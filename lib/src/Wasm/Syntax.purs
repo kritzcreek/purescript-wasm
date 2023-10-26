@@ -21,7 +21,7 @@ instance showRefType :: Show RefType where
     NullFuncRef -> "nullfuncref"
     FuncRef -> "funcref"
     ExternRef -> "externref"
-    HeapTypeRef null ix -> "ref " <> if null then "null " else "" <> show ix
+    HeapTypeRef null ix -> "ref " <> (if null then "null " else "") <> show ix
 
 data HeapType = IndexHt TypeIdx
 
@@ -53,6 +53,7 @@ type FieldType =
   { mutability :: Mutability
   , ty :: StorageType
   }
+
 type StructType = Array FieldType
 type ArrayType = FieldType
 
@@ -63,8 +64,8 @@ derive instance Ord CompositeType
 instance Show CompositeType where
   show = case _ of
     CompFunc t -> show t
-    CompStruct t -> "{" <> show t <> "}"
-    CompArray t -> "[" <> show t <> "]"
+    CompStruct t -> "(struct " <> show t <> ")"
+    CompArray t -> "(array " <> show t <> ")"
 
 type RecType = Array SubType
 
@@ -240,7 +241,9 @@ data Instruction
   | Call FuncIdx
   | Call_Indirect TypeIdx
 
-instance showInstruction :: Show Instruction where
+derive instance Eq Instruction
+derive instance Ord Instruction
+instance Show Instruction where
   show = case _ of
     I32Const x -> "i32.const " <> show x
     I32Clz -> "i32.clz"
@@ -354,6 +357,8 @@ instance showInstruction :: Show Instruction where
 
 data BlockType = BlockTypeIdx TypeIdx | BlockValType (Maybe ValType)
 
+derive instance Eq BlockType
+derive instance Ord BlockType
 instance showBlockType :: Show BlockType where
   show = case _ of
     BlockTypeIdx x -> show x
@@ -412,6 +417,14 @@ data ElemMode
   | ElemDeclarative
   | ElemActive { table :: TableIdx, offset :: Expr }
 
+derive instance Eq ElemMode
+derive instance Ord ElemMode
+instance Show ElemMode where
+  show = case _ of
+    ElemPassive -> "passive"
+    ElemDeclarative -> "declarative"
+    ElemActive { table, offset } -> "active " <> show table <> " " <> show offset
+
 type Byte = Int
 type Data =
   { mode :: DataMode
@@ -419,8 +432,15 @@ type Data =
   }
 
 data DataMode
-  = Passive
-  | Active { offset :: Expr, memory :: MemoryIdx }
+  = DataPassive
+  | DataActive { offset :: Expr, memory :: MemoryIdx }
+
+derive instance Eq DataMode
+derive instance Ord DataMode
+instance Show DataMode where
+  show = case _ of
+    DataPassive -> "passive"
+    DataActive { offset, memory } -> "active " <> show offset <> " " <> show memory
 
 type Name = String
 

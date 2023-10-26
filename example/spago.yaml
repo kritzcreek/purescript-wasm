@@ -5,6 +5,7 @@ package:
     - arrays
     - console
     - control
+    - debug
     - dodo-printer
     - dynamic-buffer
     - effect

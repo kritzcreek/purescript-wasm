@@ -164,7 +164,7 @@ write_sub_type b = case _ of
 write_rec_type :: DBuffer -> S.RecType -> Effect Unit
 write_rec_type b = case _ of
   [] -> pure unit
-  [ty] -> write_sub_type b ty
+  [ ty ] -> write_sub_type b ty
   tys -> do
     DBuffer.addByte b 0x4E
     write_vec b (map (write_sub_type b) tys)
@@ -699,10 +699,10 @@ write_code_section b funcs = write_section b 10 do
 
 write_data :: DBuffer -> S.Data -> Effect Unit
 write_data b dat = case dat.mode of
-  Passive -> do
+  DataPassive -> do
     DBuffer.addByte b 0x01
     write_vec b (map (DBuffer.addByte b) dat.init)
-  Active { memory, offset }
+  DataActive { memory, offset }
     | memory == 0 -> do
         DBuffer.addByte b 0x00
         write_expr b offset

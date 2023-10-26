@@ -5,6 +5,7 @@ import Prelude
 import Compiler as Compiler
 import Data.ArrayBuffer.Types (Uint8Array)
 import Data.Either (Either(..))
+import Debug (spyWith)
 import Parser as Parser
 import Partial.Unsafe (unsafeCrashWith)
 import Printer as Printer
@@ -21,7 +22,8 @@ compileProgram input = do
         Left err -> unsafeCrashWith ("Failed to typecheck with: " <> err)
         Right typed -> do
           let { result } = Rename.renameProgram typed
-          Encode.encodeModule (Compiler.compileProgram result)
+          let compiled = Compiler.compileProgram result
+          Encode.encodeModule (spyWith "Compiled" show compiled)
 
 renameProgram :: String -> String
 renameProgram input =
