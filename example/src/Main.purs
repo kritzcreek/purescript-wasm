@@ -40,7 +40,7 @@ fn main() : i32 = {
 main :: Effect Unit
 main = do
   let bytes = Driver.compileProgram input
-  writeToFile "playground/bytes.wasm" bytes case _ of
+  writeToFile "bytes.wasm" bytes case _ of
     Nothing ->
       pure unit
     -- runWasm "bytes.wasm"
