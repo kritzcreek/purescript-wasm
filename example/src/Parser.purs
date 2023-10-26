@@ -7,7 +7,7 @@ import Prelude
 
 import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Lit(..), Op(..), Program, Toplevel(..), ValTy(..))
 import Control.Alt ((<|>))
-import Control.Lazy (defer, fix)
+import Control.Lazy (defer)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
 import Data.Either (Either)
@@ -40,7 +40,7 @@ noNote :: Expr' Unit String -> Expr Unit String
 noNote e = { expr: e, note: unit }
 
 expr :: Parser (Expr Unit String)
-expr = fix \e ->
+expr = defer \_ ->
   buildExprParser
     [ [ Infix (l.reservedOp "/" $> \l' r' -> noNote (BinOpE Div l' r')) AssocRight
       , Infix (l.reservedOp "*" $> \l' r' -> noNote (BinOpE Mul l' r')) AssocRight
@@ -56,7 +56,7 @@ expr = fix \e ->
       , Infix (l.reservedOp "==" $> \l' r' -> noNote (BinOpE Eq l' r')) AssocRight
       ]
     ]
-    (expr1 e)
+    expr1
 
 intLit :: Parser Int
 intLit = do
@@ -67,27 +67,27 @@ intLit = do
     Nothing -> P.fail "Failed to parse number"
     Just n -> pure n
 
-expr1 :: Parser (Expr Unit String) -> Parser (Expr Unit String)
-expr1 e = block e <|> atom e
+expr1 :: Parser (Expr Unit String)
+expr1 = defer \_ -> block <|> atom
 
-varOrCall :: Parser (Expr Unit String) -> Parser (Expr Unit String)
-varOrCall e = do
+varOrCall :: Parser (Expr Unit String)
+varOrCall = defer \_ -> do
   ident <- l.identifier
-  C.optionMaybe (l.parens (l.commaSep e)) >>= case _ of
+  C.optionMaybe (l.parens (l.commaSep expr)) >>= case _ of
     Nothing -> pure (noNote (VarE ident))
     Just args -> pure (noNote (CallE ident (Array.fromFoldable args)))
 
-atom :: Parser (Expr Unit String) -> Parser (Expr Unit String)
-atom e =
+atom :: Parser (Expr Unit String)
+atom = defer \_ ->
   map (noNote <<< LitE) lit
-    <|> varOrCall e
-    <|> map noNote (IfE <$> (l.reserved "if" *> e) <*> block e <*> (l.reserved "else" *> block e))
-    <|> l.parens e
-    <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep e))
+    <|> varOrCall
+    <|> map noNote (IfE <$> (l.reserved "if" *> expr) <*> block <*> (l.reserved "else" *> block))
+    <|> l.parens expr
+    <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep expr))
 
-block :: Parser (Expr Unit String) -> Parser (Expr Unit String)
-block e =
-  noNote <<< BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep (decl e))
+block :: Parser (Expr Unit String)
+block = defer \_ ->
+  noNote <<< BlockE <$> l.braces (Array.fromFoldable <$> l.semiSep decl)
 
 foreign import parseFloat :: String -> Number
 
@@ -106,11 +106,11 @@ lit = numberLit
 parseExpr :: String -> Either P.ParseError (Expr Unit String)
 parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 
-decl :: Parser (Expr Unit String) -> Parser (Decl Unit String)
-decl e =
-  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> e
-    <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> e
-    <|> ExprD <$> e
+decl :: Parser (Decl Unit String)
+decl = defer \_ ->
+  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr
+    <|> SetD <$> (l.reserved "set" *> l.identifier <* l.symbol "=") <*> expr
+    <|> ExprD <$> expr
 
 valTy :: Parser ValTy
 valTy = defer \_ ->
