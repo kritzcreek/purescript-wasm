@@ -87,11 +87,20 @@ varOrCall = defer \_ -> do
     Nothing -> pure (noNote (VarE ident))
     Just args -> pure (noNote (CallE ident (Array.fromFoldable args)))
 
+ifExpr :: Parser (Expr Unit String)
+ifExpr = defer \_ ->
+  map
+    noNote
+    ( IfE <$> (l.reserved "if" *> expr)
+        <*> block
+        <*> (l.reserved "else" *> (block <|> ifExpr))
+    )
+
 atom :: Parser (Expr Unit String)
 atom = defer \_ ->
   map (noNote <<< LitE) lit
     <|> varOrCall
-    <|> map noNote (IfE <$> (l.reserved "if" *> expr) <*> block <*> (l.reserved "else" *> block))
+    <|> ifExpr
     <|> l.parens expr
     <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep expr))
     <|> intrinsic
