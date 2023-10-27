@@ -16,10 +16,23 @@ function canvasProgram() {
 import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
-let xs = [0.0, 500.0, 0.0, 500.0];
-let ys = [0.0, 500.0, 500.0, 0.0];
-let vxs = [11.0, 0.0 - 11.0, 13.0, 0.0 - 11.0];
-let vys = [10.0, 0.0 - 10.0, 10.0, 0.0 - 16.0];
+let xs = [0.0, 500.0, 0.0, 500.0, 0.0];
+let ys = @array_new(0.0, 5);
+let vxs = [
+  11.0,
+  f32_neg(11.0),
+  13.0,
+  f32_neg(11.0),
+  8.0
+];
+
+let vys = [
+  10.0,
+  f32_neg(10.0),
+  10.0,
+  f32_neg(16.0),
+  f32_neg(9.8)
+];
 
 fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x, y, x + size, y);
@@ -38,8 +51,7 @@ fn tick_box(elapsed_time_ms : f32, idx: i32) : i32 = {
     set xs[idx] = 0.0;
     set vxs[idx] = 0.0 - vxs[idx];
     0
-  } else {0};
-  if xs[idx] > 500.0 {
+  } else if xs[idx] > 500.0 {
     set xs[idx] = 500.0;
     set vxs[idx] = 0.0 - vxs[idx];
     0
@@ -49,8 +61,7 @@ fn tick_box(elapsed_time_ms : f32, idx: i32) : i32 = {
     set ys[idx] = 0.0;
     set vys[idx] = 0.0 - vys[idx];
     0
-  } else {0};
-  if ys[idx] > 500.0 {
+  } else if ys[idx] > 500.0 {
     set ys[idx] = 500.0;
     set vys[idx] = 0.0 - vys[idx];
     0
@@ -64,7 +75,8 @@ fn tick(elapsed_time_ms : f32) : i32 = {
   tick_box(elapsed_time_ms, 0);
   tick_box(elapsed_time_ms, 1);
   tick_box(elapsed_time_ms, 2);
-  tick_box(elapsed_time_ms, 3)
+  tick_box(elapsed_time_ms, 3);
+  tick_box(elapsed_time_ms, 4)
 }
 `.trim();
 }
