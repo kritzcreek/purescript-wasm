@@ -3,6 +3,7 @@ module Types where
 import Prelude
 
 import Ast as Ast
+import Builtins as Builtins
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Either as Either
@@ -125,7 +126,11 @@ inferExpr ctx expr = case expr.expr of
     checkTy ty (typeOf e')
     pure { expr: Ast.IfE c' t' e', note: ty }
   Ast.CallE fn args -> do
-    FuncTy argTys resTy <- Either.note ("Unknown func: " <> fn) (Map.lookup fn ctx.funcs)
+    let
+      funcTy = case Builtins.find fn of
+        Just { ty } -> Just (convertFuncTy ty)
+        Nothing -> Map.lookup fn ctx.funcs
+    FuncTy argTys resTy <- Either.note ("Unknown func: " <> fn) funcTy
     if Array.length args /= Array.length argTys then
       Left
         ( "mismatched argument count for: " <> fn

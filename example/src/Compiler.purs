@@ -145,6 +145,7 @@ compileConst e = case e.expr of
 
 compileOp :: Types.Ty -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
+  -- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
   Types.TyBool, Ast.Eq -> S.I32Eq
 
   Types.TyI32, Ast.Add -> S.I32Add
@@ -191,8 +192,9 @@ compileExpr expr = case expr.expr of
     in cond' <> [ S.If (S.BlockValType (Just ty)) t' e' ]
   Ast.CallE fn args -> do
     args' <- traverse compileExpr args
-    call <- Builder.liftBuilder do
-      Builder.callImport fn >>= case _ of
+    call <- Builder.liftBuilder case fn of
+      BuiltinV bi -> pure bi.instr
+      _ -> Builder.callImport fn >>= case _ of
         Just importCall -> pure importCall
         Nothing -> Builder.callFunc fn
     pure (Array.fold args' <> [ call ])
@@ -261,6 +263,8 @@ accessVar v = case v of
   LocalV _ -> do
     idx <- Builder.lookupLocal v
     pure { get: [ S.LocalGet idx ], set: [ S.LocalSet idx ] }
+  BuiltinV _ ->
+    unsafeCrashWith "Can't reassign a built_in"
   FunctionV _ ->
     unsafeCrashWith "Can't reassign a function"
 

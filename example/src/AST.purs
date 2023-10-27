@@ -84,6 +84,7 @@ type Program note name = Array (Toplevel note name)
 data ValTy = TyI32 | TyF32 | TyBool | TyUnit | TyArray ValTy
 
 derive instance Eq ValTy
+derive instance Ord ValTy
 derive instance Generic ValTy _
 instance Show ValTy where
   show x = genericShow x
@@ -92,6 +93,7 @@ instance Show ValTy where
 data FuncTy = FuncTy (Array ValTy) ValTy
 
 derive instance Eq FuncTy
+derive instance Ord FuncTy
 derive instance Generic FuncTy _
 instance Show FuncTy where
   show x = genericShow x
@@ -101,6 +103,7 @@ data Intrinsic
   | ArrayLen
 
 derive instance Eq Intrinsic
+derive instance Ord Intrinsic
 derive instance Generic Intrinsic _
 instance Show Intrinsic where
   show = case _ of
