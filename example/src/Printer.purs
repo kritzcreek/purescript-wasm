@@ -23,7 +23,9 @@ renderTyNote ty doc = parens (doc <+> text ":" <+> text (Types.showTy ty))
 renderAll :: forall a. Map Rename.Var String -> RenderOptions Types.Ty Rename.Var a
 renderAll nameMap =
   { renderNote: renderTyNote
-  , renderName: \v -> text (Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap))
+  , renderName: case _ of
+      Rename.BuiltinV n -> text n.name
+      v -> text (Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap))
   }
 
 renderNone :: forall a note name. Show name => RenderOptions note name a

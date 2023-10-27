@@ -1,11 +1,11 @@
-module Rename (Var(..), printVar, renameProgram, findFunc) where
+module Rename (Var(..), printVar, renameProgram) where
 
 import Prelude
 
 import Ast (Decl(..), Expr, Expr'(..), Program, SetTarget(..), Toplevel(..))
+import Builtins as Builtins
 import Control.Monad.State (State)
 import Control.Monad.State as State
-import Data.Array as Array
 import Data.List as List
 import Data.List.NonEmpty as NEL
 import Data.Map (Map)
@@ -20,6 +20,7 @@ data Var
   = GlobalV Int
   | LocalV Int
   | FunctionV Int
+  | BuiltinV Builtins.Fn
 
 derive instance Eq Var
 derive instance Ord Var
@@ -31,6 +32,7 @@ printVar = case _ of
   GlobalV x -> "$g" <> show x
   LocalV x -> "$l" <> show x
   FunctionV x -> "$f" <> show x
+  BuiltinV n -> n.name
 
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
@@ -39,13 +41,6 @@ renameProgram :: forall note. Program note String -> { nameMap :: Map Var String
 renameProgram prog = do
   let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
   { result: prog', nameMap: s.nameMap }
-
-findFunc :: Map Var String -> String -> Var
-findFunc nameMap name = unsafePartial Maybe.fromJust (Array.findMap search (Map.toUnfoldable nameMap))
-  where
-  search = case _ of
-    Tuple v@(FunctionV _) n | n == name -> Just v
-    _ -> Nothing
 
 type Scope = NEL.NonEmptyList (Map String Var)
 
@@ -75,6 +70,12 @@ mkVar mk name = do
 lookupVar :: String -> Rename Var
 lookupVar name = do
   State.gets (\s -> lookupScope name s.scope)
+
+lookupFunc :: String -> Rename Var
+lookupFunc name =
+  case Builtins.find name of
+    Just bi -> pure (BuiltinV bi)
+    Nothing -> lookupVar name
 
 withBlock :: forall a. Rename a -> Rename a
 withBlock f = do
@@ -119,7 +120,7 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
     e' <- renameExpr e
     pure (IfE c' t' e')
   CallE fn args -> do
-    fn' <- lookupVar fn
+    fn' <- lookupFunc fn
     args' <- traverse renameExpr args
     pure (CallE fn' args')
   IntrinsicE i args -> do
