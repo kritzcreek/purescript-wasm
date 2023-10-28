@@ -6,7 +6,19 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 
-data Op = Add | Sub | Mul | Div | Lt | Gt | Lte | Gte | Eq
+data Op
+  = Add
+  | Sub
+  | Mul
+  | Div
+  | Lt
+  | Gt
+  | Lte
+  | Gte
+  | Eq
+  | Neq
+  | And
+  | Or
 
 derive instance genericOp :: Generic Op _
 instance showOp :: Show Op where

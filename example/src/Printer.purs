@@ -64,6 +64,9 @@ renderOp = text <<< case _ of
   Lte -> "<="
   Gte -> ">="
   Eq -> "=="
+  Neq -> "!="
+  And -> "&&"
+  Or -> "||"
 
 renderLit :: forall a. Lit -> Doc a
 renderLit = case _ of

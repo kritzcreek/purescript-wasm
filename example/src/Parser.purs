@@ -54,6 +54,10 @@ expr = defer \_ ->
     , [ Infix (l.reservedOp "<=" $> \l' r' -> noNote (BinOpE Lte l' r')) AssocRight
       , Infix (l.reservedOp ">=" $> \l' r' -> noNote (BinOpE Gte l' r')) AssocRight
       , Infix (l.reservedOp "==" $> \l' r' -> noNote (BinOpE Eq l' r')) AssocRight
+      , Infix (l.reservedOp "!=" $> \l' r' -> noNote (BinOpE Neq l' r')) AssocRight
+      ]
+    , [ Infix (l.reservedOp "&&" $> \l' r' -> noNote (BinOpE And l' r')) AssocRight
+      , Infix (l.reservedOp "||" $> \l' r' -> noNote (BinOpE Or l' r')) AssocRight
       ]
     ]
     expr1

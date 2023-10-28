@@ -144,10 +144,15 @@ compileConst e = case e.expr of
   Ast.LitE (Ast.FloatLit x) -> Just [ S.F32Const x ]
   _ -> Nothing
 
+
 compileOp :: Types.Ty -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
   -- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
   Types.TyBool, Ast.Eq -> S.I32Eq
+  Types.TyBool, Ast.Neq -> S.I32Ne
+
+  Types.TyBool, Ast.And -> S.I32And
+  Types.TyBool, Ast.Or -> S.I32Or
 
   Types.TyI32, Ast.Add -> S.I32Add
   Types.TyI32, Ast.Sub -> S.I32Sub
@@ -168,6 +173,7 @@ compileOp = case _, _ of
   Types.TyF32, Ast.Lte -> S.F32Le
   Types.TyF32, Ast.Gte -> S.F32Ge
   Types.TyF32, Ast.Eq -> S.F32Eq
+
   t, o ->
     unsafeCrashWith ("no instruction for operand: " <> show o <> " at type: " <> show t)
 

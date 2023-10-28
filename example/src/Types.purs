@@ -88,6 +88,12 @@ checkNumericOperator tyL tyR = do
   checkTy tyL tyR
   pure tyL
 
+checkBoolOperator :: Ty -> Ty -> Either String Ty
+checkBoolOperator tyL tyR = do
+  checkTy TyBool tyL
+  checkTy TyBool tyR
+  pure TyBool
+
 checkComparisonOperator :: Ty -> Ty -> Either String Ty
 checkComparisonOperator tyL tyR = do
   checkTyNum tyL
@@ -108,6 +114,7 @@ inferExpr ctx expr = case expr.expr of
     let tyR = typeOf r'
     ty <- case o of
       Ast.Eq -> pure TyBool
+      Ast.Neq -> pure TyBool
       Ast.Lt -> checkComparisonOperator tyL tyR
       Ast.Lte -> checkComparisonOperator tyL tyR
       Ast.Gt -> checkComparisonOperator tyL tyR
@@ -116,6 +123,8 @@ inferExpr ctx expr = case expr.expr of
       Ast.Sub -> checkNumericOperator tyL tyR
       Ast.Mul -> checkNumericOperator tyL tyR
       Ast.Div -> checkNumericOperator tyL tyR
+      Ast.And -> checkBoolOperator tyL tyR
+      Ast.Or -> checkBoolOperator tyL tyR
     pure { expr: Ast.BinOpE o l' r', note: ty }
   Ast.IfE c t e -> do
     c' <- inferExpr ctx c
