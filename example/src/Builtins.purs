@@ -9,7 +9,7 @@ import Wasm.Syntax as S
 
 type Fn =
   { name :: String
-  , ty :: FuncTy
+  , ty :: FuncTy String
   , instr :: S.Instruction
   }
 

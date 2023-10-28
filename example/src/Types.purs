@@ -12,89 +12,94 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
+import Partial.Unsafe (unsafeCrashWith)
 
-data Ty
+data Ty name
   = TyI32
   | TyF32
   | TyBool
   | TyUnit
-  | TyArray Ty
+  | TyArray (Ty name)
+  | TyCons name
 
-showTy :: Ty -> String
+showTy :: forall name. Show name => Ty name -> String
 showTy = case _ of
   TyI32 -> "i32"
   TyF32 -> "f32"
   TyBool -> "bool"
   TyUnit -> "unit"
   TyArray t -> "[" <> showTy t <> "]"
+  TyCons c -> show c
 
-instance Show Ty where
+instance Show name => Show (Ty name) where
   show = showTy
 
-convertTy :: Ast.ValTy -> Ty
+convertTy :: forall name. Ast.ValTy name -> Ty name
 convertTy = case _ of
   Ast.TyI32 -> TyI32
   Ast.TyF32 -> TyF32
   Ast.TyBool -> TyBool
   Ast.TyUnit -> TyUnit
   Ast.TyArray t -> TyArray (convertTy t)
+  Ast.TyCons c -> TyCons c
 
-data FuncTy = FuncTy (Array Ty) Ty
+data FuncTy name = FuncTy (Array (Ty name)) (Ty name)
 
-convertFuncTy :: Ast.FuncTy -> FuncTy
+convertFuncTy :: forall name. Ast.FuncTy name -> FuncTy name
 convertFuncTy (Ast.FuncTy params result) = FuncTy (map convertTy params) (convertTy result)
 
-type TypedExpr = Ast.Expr Ty String
-type TypedSetTarget = Ast.SetTarget Ty String
-type TypedDecl = Ast.Decl Ty String
-type TypedToplevel = Ast.Toplevel Ty String
-type TypedFunc = Ast.Func Ty String
-type TypedProgram = Ast.Program Ty String
+type TypedExpr = Ast.Expr (Ty String) String
+type TypedSetTarget = Ast.SetTarget (Ty String) String
+type TypedDecl = Ast.Decl (Ty String) String
+type TypedToplevel = Ast.Toplevel (Ty String) String
+type TypedFunc = Ast.Func (Ty String) String
+type TypedProgram = Ast.Program (Ty String) String
 
-type Ctx = { funcs :: Map String FuncTy, vals :: Map String Ty }
+type Ctx = { funcs :: Map String (FuncTy String), vals :: Map String (Ty String) }
 
-addVal :: String -> Ty -> Ctx -> Ctx
+addVal :: String -> Ty String -> Ctx -> Ctx
 addVal v t ctx = ctx { vals = Map.insert v t ctx.vals }
 
-lookupVal :: String -> Ctx -> Either String Ty
+lookupVal :: String -> Ctx -> Either String (Ty String)
 lookupVal v ctx = Either.note ("Unknown variable: " <> v) (Map.lookup v ctx.vals)
 
-typeOf :: forall name. Ast.Expr Ty name -> Ty
+typeOf :: forall name. Ast.Expr (Ty name) name -> Ty name
 typeOf e = e.note
 
-checkTy :: Ty -> Ty -> Either String Unit
+checkTy :: Ty String -> Ty String -> Either String Unit
 checkTy = case _, _ of
   TyI32, TyI32 -> pure unit
   TyF32, TyF32 -> pure unit
   TyBool, TyBool -> pure unit
   TyUnit, TyUnit -> pure unit
   TyArray t, TyArray t' -> checkTy t t'
+  TyCons t, TyCons t' | t == t' -> pure unit
   expected, actual -> Left ("Expected " <> show expected <> ", but got " <> show actual)
 
-checkTyNum :: Ty -> Either String Unit
+checkTyNum :: forall name. Show name => Ty name -> Either String Unit
 checkTyNum = case _ of
   TyF32 -> pure unit
   TyI32 -> pure unit
   t -> Left ("Expected a numeric type but got: " <> show t)
 
-checkTyArray :: Ty -> Either String Unit
+checkTyArray :: forall name. Show name => Ty name -> Either String Unit
 checkTyArray = case _ of
   TyArray _ -> pure unit
   t -> Left ("Expected an array type but got: " <> show t)
 
-checkNumericOperator :: Ty -> Ty -> Either String Ty
+checkNumericOperator :: Ty String -> Ty String -> Either String (Ty String)
 checkNumericOperator tyL tyR = do
   checkTyNum tyL
   checkTy tyL tyR
   pure tyL
 
-checkBoolOperator :: Ty -> Ty -> Either String Ty
+checkBoolOperator :: Ty String -> Ty String -> Either String (Ty String)
 checkBoolOperator tyL tyR = do
   checkTy TyBool tyL
   checkTy TyBool tyR
   pure TyBool
 
-checkComparisonOperator :: Ty -> Ty -> Either String Ty
+checkComparisonOperator :: Ty String -> Ty String -> Either String (Ty String)
 checkComparisonOperator tyL tyR = do
   checkTyNum tyL
   checkTy tyL tyR
@@ -186,8 +191,10 @@ inferExpr ctx expr = case expr.expr of
         pure { expr: Ast.ArrayIdxE arr' idx', note: tyEl }
       _ -> do
         Left ("Expected array type but got: " <> show (typeOf arr'))
+  Ast.StructE ty fields -> unsafeCrashWith "Not implemented"
+  Ast.StructIdxE struct idx -> unsafeCrashWith "Not implemented"
 
-inferDecls :: forall note. Ctx -> Array (Ast.Decl note String) -> Either String { ty :: Ty, decls :: Array TypedDecl }
+inferDecls :: forall note. Ctx -> Array (Ast.Decl note String) -> Either String { ty :: Ty String, decls :: Array TypedDecl }
 inferDecls initialCtx initialDecls = do
   result <- Array.foldM
     ( \({ ctx, decls }) -> case _ of
@@ -223,7 +230,7 @@ inferSetTarget
   :: forall note
    . Ctx
   -> Ast.SetTarget note String
-  -> Either String { ty :: Ty, target :: TypedSetTarget }
+  -> Either String { ty :: Ty String, target :: TypedSetTarget }
 inferSetTarget ctx = case _ of
   Ast.VarST v -> do
     ty <- lookupVal v ctx
@@ -237,13 +244,13 @@ inferSetTarget ctx = case _ of
         pure { ty: elemTy, target: Ast.ArrayIdxST v ix' }
       _ -> Left ("Tried to assign to a non-array target " <> show tyArray)
 
-inferLit :: Ast.Lit -> Ty
+inferLit :: forall name. Ast.Lit -> Ty name
 inferLit = case _ of
   Ast.IntLit _ -> TyI32
   Ast.FloatLit _ -> TyF32
   Ast.BoolLit _ -> TyBool
 
-topFuncTy :: forall note. Ast.Toplevel note String -> Maybe (Tuple String FuncTy)
+topFuncTy :: forall note. Ast.Toplevel note String -> Maybe (Tuple String (FuncTy String))
 topFuncTy = case _ of
   Ast.TopFunc f -> do
     let ty = FuncTy (map (convertTy <<< _.ty) f.params) (convertTy f.returnTy)
@@ -267,6 +274,8 @@ inferToplevel ctx = case _ of
       { ctx
       , toplevel: Ast.TopFunc (f { body = body })
       }
+  Ast.TopStruct name fields ->
+    unsafeCrashWith "Not implemented"
 
 inferProgram :: forall note. Ast.Program note String -> Either String TypedProgram
 inferProgram toplevels = do

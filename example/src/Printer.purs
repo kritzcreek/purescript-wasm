@@ -135,28 +135,28 @@ renderFunc renderOptions func = do
     headerD = text "fn" <+> renderOptions.renderName func.name
     paramD =
       parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderParam func.params))
-    returnTyD =
-      if func.returnTy /= TyUnit then
-        D.space <> text ":" <+> renderValTy func.returnTy
-      else
-        mempty
+    returnTyD = case func.returnTy of
+      TyUnit -> D.space <> text ":" <+> renderValTy renderOptions func.returnTy
+      _ ->  mempty
     bodyD = renderExpr renderOptions func.body
   (headerD <+> paramD <> returnTyD <+> text "=") </> indent bodyD
   where
-  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderValTy ty
+  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderValTy renderOptions ty
 
-renderValTy :: forall a. ValTy -> Doc a
-renderValTy = case _ of
+renderValTy :: forall a note name. RenderOptions note name a -> ValTy name -> Doc a
+renderValTy renderOptions = case _ of
   TyI32 -> text "i32"
   TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
-  TyArray t -> text "[" <> renderValTy t <> text "]"
+  TyArray t -> text "[" <> renderValTy renderOptions t <> text "]"
+  TyCons c -> renderOptions.renderName c
 
-renderFuncTy :: forall a. FuncTy -> Doc a
-renderFuncTy = case _ of
+renderFuncTy :: forall a note name. RenderOptions note name a -> FuncTy name -> Doc a
+renderFuncTy renderOptions = case _ of
   FuncTy arguments result ->
-    parens (D.foldWithSeparator (text "," <> D.space) (map renderValTy arguments)) <+> text "->" <+> renderValTy result
+    parens (D.foldWithSeparator (text "," <> D.space) (map (renderValTy renderOptions) arguments))
+    <+> text "->" <+> renderValTy renderOptions result
 
 renderToplevel :: forall a note name. RenderOptions note name a -> Toplevel note name -> Doc a
 renderToplevel renderOptions = case _ of
@@ -164,14 +164,14 @@ renderToplevel renderOptions = case _ of
   TopLet name init ->
     (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions init <> text ";"
   TopStruct name fields -> do
-    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderValTy ty
+    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderValTy renderOptions ty
     (text "struct" <+> renderOptions.renderName name)
       </> curlies (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields))
   TopImport name ty externalName ->
     text "import"
       <+> renderOptions.renderName name
       <+> text ":"
-      <+> renderFuncTy ty
+      <+> renderFuncTy renderOptions ty
       <+> text "from"
       <+> text externalName
 

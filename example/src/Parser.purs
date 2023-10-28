@@ -207,14 +207,15 @@ setTarget = do
     Nothing -> pure (VarST name)
     Just ix -> pure (ArrayIdxST name ix)
 
-valTy :: Parser ValTy
+valTy :: Parser (ValTy String)
 valTy = defer \_ ->
   l.reserved "i32" $> TyI32
     <|> l.reserved "f32" $> TyF32
     <|> l.reserved "bool" $> TyBool
     <|> map TyArray (l.brackets valTy)
+    <|> map TyCons upperIdent
 
-funcTy :: Parser FuncTy
+funcTy :: Parser (FuncTy String)
 funcTy = ado
   arguments <- l.parens (l.commaSep valTy)
   l.symbol "->"
@@ -231,7 +232,7 @@ topFunc = ado
   body <- expr
   in TopFunc { name, export: Just name, params: Array.fromFoldable params, returnTy, body }
 
-param :: Parser { name :: String, ty :: ValTy }
+param :: Parser { name :: String, ty :: ValTy String }
 param = ado
   name <- lowerIdent
   _ <- l.symbol ":"

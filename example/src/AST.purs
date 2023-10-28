@@ -75,19 +75,19 @@ isLetD = case _ of
 type Func note name =
   { name :: name
   , export :: Maybe String
-  , params :: Array { name :: name, ty :: ValTy }
-  , returnTy :: ValTy
+  , params :: Array { name :: name, ty :: ValTy name }
+  , returnTy :: ValTy name
   , body :: Expr note name
   }
 
-funcTyOf :: forall note name. Func note name -> FuncTy
+funcTyOf :: forall note name. Func note name -> FuncTy name
 funcTyOf { params, returnTy } = FuncTy (map _.ty params) returnTy
 
 data Toplevel note name
   = TopFunc (Func note name)
   | TopLet name (Expr note name)
-  | TopImport name FuncTy String -- Name, Type, ExternalName
-  | TopStruct name (Array { name :: name, ty :: ValTy })
+  | TopImport name (FuncTy name) String -- Name, Type, ExternalName
+  | TopStruct name (Array { name :: name, ty :: ValTy name })
 
 derive instance Generic (Toplevel note name) _
 instance (Show note, Show name) => Show (Toplevel note name) where
@@ -97,21 +97,21 @@ type Program note name = Array (Toplevel note name)
 
 -- Types
 
-data ValTy = TyI32 | TyF32 | TyBool | TyUnit | TyArray ValTy
+data ValTy name = TyI32 | TyF32 | TyBool | TyUnit | TyArray (ValTy name) | TyCons name
 
-derive instance Eq ValTy
-derive instance Ord ValTy
-derive instance Generic ValTy _
-instance Show ValTy where
+derive instance Eq name => Eq (ValTy name)
+derive instance Ord name => Ord (ValTy name)
+derive instance Generic (ValTy name) _
+instance Show name => Show (ValTy name) where
   show x = genericShow x
 
 -- Potentially multi value returns?
-data FuncTy = FuncTy (Array ValTy) ValTy
+data FuncTy name = FuncTy (Array (ValTy name)) (ValTy name)
 
-derive instance Eq FuncTy
-derive instance Ord FuncTy
-derive instance Generic FuncTy _
-instance Show FuncTy where
+derive instance Eq name => Eq (FuncTy name)
+derive instance Ord name => Ord (FuncTy name)
+derive instance Generic (FuncTy name) _
+instance Show name => Show (FuncTy name) where
   show x = genericShow x
 
 data Intrinsic

@@ -12,14 +12,16 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
-import Data.Traversable (traverse)
+import Data.Traversable (for, for_, traverse)
 import Data.Tuple (Tuple(..))
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 
 data Var
   = GlobalV Int
   | LocalV Int
   | FunctionV Int
+  | TypeV Int
+  | FieldV Int
   | BuiltinV Builtins.Fn
 
 derive instance Eq Var
@@ -31,7 +33,9 @@ printVar :: Var -> String
 printVar = case _ of
   GlobalV x -> "$g" <> show x
   LocalV x -> "$l" <> show x
-  FunctionV x -> "$f" <> show x
+  FunctionV x -> "$fn" <> show x
+  TypeV x -> "$t" <> show x
+  FieldV x -> "$f" <> show x
   BuiltinV n -> n.name
 
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
@@ -39,7 +43,7 @@ printVar = case _ of
 -- | Also returns a Map that maps every created identifier back to its original name
 renameProgram :: forall note. Program note String -> { nameMap :: Map Var String, result :: Program note Var }
 renameProgram prog = do
-  let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0 }
+  let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0, types: Map.empty }
   { result: prog', nameMap: s.nameMap }
 
 type Scope = NEL.NonEmptyList (Map String Var)
@@ -52,7 +56,24 @@ addVar n idx scope = do
   let { head, tail } = NEL.uncons scope
   NEL.cons' (Map.insert n idx head) tail
 
-type Rename a = State { scope :: Scope, supply :: Int, nameMap :: Map Var String } a
+addType :: String -> Array String -> Rename Unit
+addType name fields = do
+  nameVar <- mkVar TypeV name
+  fieldVars <- traverse (\name' -> Tuple name' <$> mkVar FieldV name') fields
+  State.modify_ (\s -> s { types = Map.insert name { var: nameVar, fields: Map.fromFoldable fieldVars } s.types })
+
+type TypeInfo =
+  { var :: Var
+  , fields :: Map String Var
+  }
+
+type Rename a = State
+  { scope :: Scope
+  , types :: Map String TypeInfo
+  , supply :: Int
+  , nameMap :: Map Var String
+  }
+  a
 
 mkVar :: (Int -> Var) -> String -> Rename Var
 mkVar mk name = do
@@ -77,6 +98,13 @@ lookupFunc name =
     Just bi -> pure (BuiltinV bi)
     Nothing -> lookupVar name
 
+lookupType :: String -> Rename TypeInfo
+lookupType name = do
+  State.gets (\s -> unsafePartial Maybe.fromJust (Map.lookup name s.types))
+
+lookupField :: String -> TypeInfo -> Var
+lookupField name info = unsafePartial Maybe.fromJust (Map.lookup name info.fields)
+
 withBlock :: forall a. Rename a -> Rename a
 withBlock f = do
   oldScope <- State.gets _.scope
@@ -85,8 +113,13 @@ withBlock f = do
   State.modify_ (_ { scope = oldScope })
   pure res
 
+-- TODO: Forward declare function names and types
 renameProgram' :: forall note. Program note String -> Rename (Program note Var)
-renameProgram' prog = traverse renameToplevel prog
+renameProgram' prog = do
+  for_ prog case _ of
+    TopStruct name fields -> addType name (map _.name fields)
+    _ -> pure unit
+  traverse renameToplevel prog
 
 renameToplevel :: forall note. Toplevel note String -> Rename (Toplevel note Var)
 renameToplevel = case _ of
@@ -103,6 +136,9 @@ renameToplevel = case _ of
     expr' <- renameExpr expr
     var <- mkVar GlobalV name
     pure (TopLet var expr')
+  TopStruct name fields -> do
+    tyInfo <- lookupType name
+    pure (TopStruct tyInfo.var (map (\f -> f { name = lookupField f.name tyInfo }) fields))
 
 renameExpr :: forall note. Expr note String -> Rename (Expr note Var)
 renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
@@ -136,6 +172,18 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
     arr' <- renameExpr arr
     idx' <- renameExpr idx
     pure (ArrayIdxE arr' idx')
+  ArrayIdxE arr idx -> do
+    arr' <- renameExpr arr
+    idx' <- renameExpr idx
+    pure (ArrayIdxE arr' idx')
+  StructE ty fields -> do
+    tyInfo <- lookupType ty
+    fields' <- for fields \{ name, expr: e } -> do
+      expr' <- renameExpr e
+      pure { name: lookupField name tyInfo, expr: expr' }
+    pure (StructE tyInfo.var fields')
+  StructIdxE struct idx -> do
+    unsafeCrashWith "not implemented"
 
 renameDecl
   :: forall note
