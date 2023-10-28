@@ -3,10 +3,13 @@ import { compileProgram, renameProgram } from "../output/Driver/index.js";
 
 function mainProgram() {
   return localStorage.getItem("mainProgram") ?? `
-fn main() : i32 = {
-  let x = [1, 2, 3];
-  let y = [x, x];
-  x[0] + y[0][1]
+import log : (i32) -> i32 from log
+
+fn main() = {
+  let x = 2;
+  while x > 0 {
+    set x = log(x) - 1
+  }
 }
 `.trim()
 }
@@ -16,23 +19,10 @@ function canvasProgram() {
 import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
 
-let xs = [0.0, 500.0, 0.0, 500.0, 0.0];
+let xs = [0.0, 100.0, 200.0, 300.0, 400.0];
 let ys = @array_new(0.0, 5);
-let vxs = [
-  11.0,
-  f32_neg(11.0),
-  13.0,
-  f32_neg(11.0),
-  8.0
-];
-
-let vys = [
-  10.0,
-  f32_neg(10.0),
-  10.0,
-  f32_neg(16.0),
-  f32_neg(9.8)
-];
+let vxs = [9.0, 10.0, 11.0, 12.0, 13.0];
+let vys = [9.0, 10.0, 11.0, 12.0, 13.0];
 
 fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x, y, x + size, y);
@@ -41,42 +31,34 @@ fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
   draw_line(x + size, y + size, x + size, y)
 }
 
-fn tick_box(elapsed_time_ms : f32, idx: i32) : i32 = {
-  let elapsed_factor = elapsed_time_ms / 32.0;
-
-  set xs[idx] = xs[idx] + vxs[idx] * elapsed_factor;
-  set ys[idx] = ys[idx] + vys[idx] * elapsed_factor;
-
-  if xs[idx] < 0.0 {
-    set xs[idx] = 0.0;
-    set vxs[idx] = 0.0 - vxs[idx];
-    0
-  } else if xs[idx] > 500.0 {
-    set xs[idx] = 500.0;
-    set vxs[idx] = 0.0 - vxs[idx];
-    0
-  } else {0};
-
-  if ys[idx] < 0.0 {
-    set ys[idx] = 0.0;
-    set vys[idx] = 0.0 - vys[idx];
-    0
-  } else if ys[idx] > 500.0 {
-    set ys[idx] = 500.0;
-    set vys[idx] = 0.0 - vys[idx];
-    0
-  } else {0};
-
-  draw_cube(xs[idx], ys[idx], 20.0)
+fn clamp(min : f32, val : f32, max : f32) : f32 = {
+  f32_min(500.0, f32_max(0.0, val))
 }
 
-fn tick(elapsed_time_ms : f32) : i32 = {
+fn tick(elapsed_time_ms : f32) = {
   clear();
-  tick_box(elapsed_time_ms, 0);
-  tick_box(elapsed_time_ms, 1);
-  tick_box(elapsed_time_ms, 2);
-  tick_box(elapsed_time_ms, 3);
-  tick_box(elapsed_time_ms, 4)
+
+  let idx = 0;
+  while idx < @array_len(xs) {
+    let elapsed_factor = elapsed_time_ms / 32.0;
+
+    set xs[idx] = xs[idx] + vxs[idx] * elapsed_factor;
+    set ys[idx] = ys[idx] + vys[idx] * elapsed_factor;
+
+    if xs[idx] < 0.0 || xs[idx] > 500.0 {
+      set xs[idx] = clamp(0.0, xs[idx], 500.0);
+      set vxs[idx] = 0.0 - vxs[idx]
+    } else {};
+
+    if ys[idx] < 0.0 || ys[idx] > 500.0 {
+      set ys[idx] = clamp(0.0, ys[idx], 500.0);
+      set vys[idx] = 0.0 - vys[idx]
+    } else {};
+
+    draw_cube(xs[idx], ys[idx], 20.0);
+
+    set idx = idx + 1
+  }
 }
 `.trim();
 }
