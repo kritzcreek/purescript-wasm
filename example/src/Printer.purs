@@ -98,9 +98,18 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
   ArrayE elements ->
-    brackets (D.foldWithSeparator (text "," <> break) (map (renderExpr renderOptions) elements))
+    brackets (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) elements))
   ArrayIdxE array index ->
     renderExpr renderOptions array <> brackets (renderExpr renderOptions index)
+  StructE name fields -> do
+    let
+      renderField { name: name', expr: expr' } =
+        renderOptions.renderName name' <+> text "=" <+> renderExpr renderOptions expr'
+      fields' =
+        D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields)
+    renderOptions.renderName name <+> curlies fields'
+  StructIdxE struct index ->
+    renderExpr renderOptions struct <> text "." <> renderOptions.renderName index
 
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of
@@ -154,6 +163,10 @@ renderToplevel renderOptions = case _ of
   TopFunc func -> renderFunc renderOptions func
   TopLet name init ->
     (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions init <> text ";"
+  TopStruct name fields -> do
+    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderValTy ty
+    (text "struct" <+> renderOptions.renderName name)
+      </> curlies (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields))
   TopImport name ty externalName ->
     text "import"
       <+> renderOptions.renderName name
