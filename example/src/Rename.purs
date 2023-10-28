@@ -41,7 +41,7 @@ printVar = case _ of
 -- | Takes a parsed Program and replaces all bound names with unique identifiers (Int's)
 -- |
 -- | Also returns a Map that maps every created identifier back to its original name
-renameProgram :: forall note. Program note String -> { nameMap :: Map Var String, result :: Program note Var }
+renameProgram :: Program (Ty String) String -> { nameMap :: Map Var String, result :: Program (Ty Var) Var }
 renameProgram prog = do
   let (Tuple prog' s) = State.runState (renameProgram' prog) { scope: NEL.singleton Map.empty, nameMap: Map.empty, supply: 0, types: Map.empty }
   { result: prog', nameMap: s.nameMap }
@@ -102,6 +102,11 @@ lookupTy :: String -> Rename TypeInfo
 lookupTy name = do
   State.gets (\s -> unsafePartial Maybe.fromJust (Map.lookup name s.types))
 
+lookupTyV :: Var -> Rename TypeInfo
+lookupTyV v = do
+  tys <- State.gets _.types
+  pure (unsafePartial Maybe.fromJust (List.find (\ti -> ti.var == v) (Map.values tys)))
+
 lookupField :: String -> TypeInfo -> Var
 lookupField name info = unsafePartial Maybe.fromJust (Map.lookup name info.fields)
 
@@ -114,14 +119,14 @@ withBlock f = do
   pure res
 
 -- TODO: Forward declare function names and types
-renameProgram' :: forall note. Program note String -> Rename (Program note Var)
+renameProgram' :: Program (Ty String) String -> Rename (Program (Ty Var) Var)
 renameProgram' prog = do
   for_ prog case _ of
     TopStruct name fields -> addType name (map _.name fields)
     _ -> pure unit
   traverse renameToplevel prog
 
-renameToplevel :: forall note. Toplevel note String -> Rename (Toplevel note Var)
+renameToplevel :: Toplevel (Ty String) String -> Rename (Toplevel (Ty Var) Var)
 renameToplevel = case _ of
   TopImport name ty externalName -> do
     var <- mkVar FunctionV name
@@ -146,8 +151,8 @@ renameToplevel = case _ of
       pure { name: name', ty: ty' }
     pure (TopStruct tyInfo.var fields')
 
-renameExpr :: forall note. Expr note String -> Rename (Expr note Var)
-renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
+renameExpr :: Expr (Ty String) String -> Rename (Expr (Ty Var) Var)
+renameExpr expr = { note: _, expr: _ } <$> renameTy expr.note <*> case expr.expr of
   LitE lit -> pure (LitE lit)
   VarE v -> do
     var <- lookupVar v
@@ -186,12 +191,15 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
       pure { name: name', expr: expr' }
     pure (StructE tyInfo.var fields')
   StructIdxE struct idx -> do
-    unsafeCrashWith "not implemented"
+    struct' <- renameExpr struct
+    case struct'.note of
+      TyCons tyV -> do
+        tyInfo <- lookupTyV tyV
+        let idx' = lookupField idx tyInfo
+        pure (StructIdxE struct' idx')
+      _ -> unsafeCrashWith "Tried to rename field access to a non-struct"
 
-renameDecl
-  :: forall note
-   . Decl note String
-  -> Rename (Decl note Var)
+renameDecl :: Decl (Ty String) String -> Rename (Decl (Ty Var) Var)
 renameDecl = case _ of
   LetD binder expr -> do
     expr' <- renameExpr expr
@@ -210,9 +218,8 @@ renameDecl = case _ of
     pure (WhileD cond' expr')
 
 renameSetTarget
-  :: forall note
-   . SetTarget note String
-  -> Rename (SetTarget note Var)
+  :: SetTarget (Ty String) String
+  -> Rename (SetTarget (Ty Var) Var)
 renameSetTarget = case _ of
   VarST binder -> do
     var <- lookupVar binder
