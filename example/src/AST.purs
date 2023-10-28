@@ -37,6 +37,8 @@ data Expr' note name
   | VarE name
   | ArrayE (Array (Expr note name))
   | ArrayIdxE (Expr note name) (Expr note name)
+  | StructE name (Array { name :: name, expr :: (Expr note name) })
+  | StructIdxE (Expr note name) name
   | BinOpE Op (Expr note name) (Expr note name)
   | IfE (Expr note name) (Expr note name) (Expr note name)
   | CallE name (Array (Expr note name))
@@ -85,6 +87,7 @@ data Toplevel note name
   = TopFunc (Func note name)
   | TopLet name (Expr note name)
   | TopImport name FuncTy String -- Name, Type, ExternalName
+  | TopStruct name (Array { name :: name, ty :: ValTy })
 
 derive instance Generic (Toplevel note name) _
 instance (Show note, Show name) => Show (Toplevel note name) where

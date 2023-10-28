@@ -15,6 +15,9 @@ import Data.Identity (Identity)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits as CU
+import Data.String.Regex (Regex)
+import Data.String.Regex as Regex
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Parsing as P
 import Parsing.Combinators as C
 import Parsing.Combinators.Array (many1)
@@ -32,9 +35,38 @@ l = T.makeTokenParser langStyle
   langStyle = T.LanguageDef langDef
   langDef =
     javaDef
-      { reservedNames = [ "fn", "true", "false", "if", "else", "let" ]
-      , reservedOpNames = [ "+", "-", "*", "/", "<", ">", "<=", ">=", "==" ]
+      { reservedNames = [ "fn", "true", "false", "if", "else", "let", "set", "while" ]
+      , reservedOpNames = [ "+", "-", "*", "/", "<", ">", "<=", ">=", "==", "!=" ]
       }
+
+identStartR :: Regex
+identStartR = unsafeRegex "[a-z_]" mempty
+
+identContinueR :: Regex
+identContinueR = unsafeRegex "[a-zA-Z0-9_]" mempty
+
+upperIdentStartR :: Regex
+upperIdentStartR = unsafeRegex "[A-Z]" mempty
+
+identStart :: Parser Char
+identStart =
+  PS.satisfy (Regex.test identStartR <<< CU.singleton)
+
+identContinue :: Parser Char
+identContinue =
+  PS.satisfy (Regex.test identContinueR <<< CU.singleton)
+
+lowerIdent :: Parser String
+lowerIdent = l.lexeme do
+  c <- identStart
+  cs <- Array.many identContinue
+  pure (CU.singleton c <> CU.fromCharArray cs)
+
+upperIdent :: Parser String
+upperIdent = l.lexeme do
+  c <- PS.satisfy (Regex.test upperIdentStartR <<< CU.singleton)
+  cs <- Array.many identContinue
+  pure (CU.singleton c <> CU.fromCharArray cs)
 
 noNote :: Expr' Unit String -> Expr Unit String
 noNote e = { expr: e, note: unit }
@@ -74,19 +106,21 @@ intLit = do
 expr1 :: Parser (Expr Unit String)
 expr1 = defer \_ -> block <|> expr2
 
-arrayIdx :: Expr Unit String -> Parser (Expr Unit String)
-arrayIdx e = C.optionMaybe (l.brackets expr) >>= case _ of
-  Nothing -> pure e
-  Just ix -> arrayIdx (noNote (ArrayIdxE e ix))
+exprIdx :: Expr Unit String -> Parser (Expr Unit String)
+exprIdx e = C.optionMaybe (l.brackets expr) >>= case _ of
+  Nothing -> C.optionMaybe (l.symbol "." *> lowerIdent) >>= case _ of
+    Just fieldIx -> exprIdx (noNote (StructIdxE e fieldIx))
+    Nothing -> pure e
+  Just ix -> exprIdx (noNote (ArrayIdxE e ix))
 
 expr2 :: Parser (Expr Unit String)
 expr2 = defer \_ -> do
   e <- atom
-  arrayIdx e
+  exprIdx e
 
 varOrCall :: Parser (Expr Unit String)
 varOrCall = defer \_ -> do
-  ident <- l.identifier
+  ident <- lowerIdent
   C.optionMaybe (l.parens (l.commaSep expr)) >>= case _ of
     Nothing -> pure (noNote (VarE ident))
     Just args -> pure (noNote (CallE ident (Array.fromFoldable args)))
@@ -100,14 +134,27 @@ ifExpr = defer \_ ->
         <*> (l.reserved "else" *> (block <|> ifExpr))
     )
 
+structExpr :: Parser (Expr Unit String)
+structExpr = defer \_ -> do
+  name <- upperIdent
+  fields <- l.braces (l.commaSep field)
+  pure (noNote (StructE name (Array.fromFoldable fields)))
+  where
+  field = do
+    name <- lowerIdent
+    _ <- l.symbol "="
+    e <- expr
+    pure { name, expr: e }
+
 atom :: Parser (Expr Unit String)
 atom = defer \_ ->
   map (noNote <<< LitE) lit
-    <|> varOrCall
     <|> ifExpr
     <|> l.parens expr
     <|> map (noNote <<< ArrayE) (l.brackets (Array.fromFoldable <$> l.commaSep expr))
+    <|> structExpr
     <|> intrinsic
+    <|> varOrCall
 
 intrinsic :: Parser (Expr Unit String)
 intrinsic = do
@@ -148,14 +195,14 @@ parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
 
 decl :: Parser (Decl Unit String)
 decl = defer \_ ->
-  LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr
+  LetD <$> (l.reserved "let" *> lowerIdent <* l.symbol "=") <*> expr
     <|> SetD <$> (l.reserved "set" *> setTarget <* l.symbol "=") <*> expr
     <|> WhileD <$> (l.reserved "while" *> expr) <*> block
     <|> ExprD <$> expr
 
 setTarget :: Parser (SetTarget Unit String)
 setTarget = do
-  name <- l.identifier
+  name <- lowerIdent
   C.optionMaybe (l.brackets expr) >>= case _ of
     Nothing -> pure (VarST name)
     Just ix -> pure (ArrayIdxST name ix)
@@ -177,23 +224,24 @@ funcTy = ado
 topFunc :: Parser (Toplevel Unit String)
 topFunc = ado
   l.reserved "fn"
-  name <- l.identifier
+  name <- lowerIdent
   params <- l.parens (l.commaSep param)
   returnTy <- C.option TyUnit (l.symbol ":" *> valTy)
   _ <- l.symbol "="
   body <- expr
   in TopFunc { name, export: Just name, params: Array.fromFoldable params, returnTy, body }
-  where
-  param = ado
-    name <- l.identifier
-    _ <- l.symbol ":"
-    ty <- valTy
-    in { name, ty }
+
+param :: Parser { name :: String, ty :: ValTy }
+param = ado
+  name <- lowerIdent
+  _ <- l.symbol ":"
+  ty <- valTy
+  in { name, ty }
 
 topLet :: Parser (Toplevel Unit String)
 topLet = ado
   l.reserved "let"
-  n <- l.identifier
+  n <- lowerIdent
   _ <- l.symbol "="
   initializer <- expr
   l.symbol ";"
@@ -202,15 +250,22 @@ topLet = ado
 topImport :: Parser (Toplevel Unit String)
 topImport = ado
   l.reserved "import"
-  name <- l.identifier
+  name <- lowerIdent
   l.symbol ":"
   ty <- funcTy
   l.reserved "from"
-  externalName <- l.identifier
+  externalName <- lowerIdent
   in TopImport name ty externalName
 
+topStruct :: Parser (Toplevel Unit String)
+topStruct = ado
+  l.reserved "struct"
+  name <- upperIdent
+  fields <- l.braces (l.commaSep param)
+  in TopStruct name (Array.fromFoldable fields)
+
 topLevel :: Parser (Toplevel Unit String)
-topLevel = topImport <|> topLet <|> topFunc
+topLevel = topImport <|> topLet <|> topFunc <|> topStruct
 
 parseProgram :: String -> Either P.ParseError (Program Unit String)
 parseProgram i = P.runParser i (l.whiteSpace *> Array.some topLevel <* PS.eof)

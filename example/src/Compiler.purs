@@ -144,7 +144,6 @@ compileConst e = case e.expr of
   Ast.LitE (Ast.FloatLit x) -> Just [ S.F32Const x ]
   _ -> Nothing
 
-
 compileOp :: Types.Ty -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
   -- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
