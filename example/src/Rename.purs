@@ -153,6 +153,10 @@ renameDecl = case _ of
   ExprD expr -> do
     expr' <- renameExpr expr
     pure (ExprD expr')
+  WhileD cond expr -> do
+    cond' <- renameExpr cond
+    expr' <- renameExpr expr
+    pure (WhileD cond' expr')
 
 renameSetTarget
   :: forall note

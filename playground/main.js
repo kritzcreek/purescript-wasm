@@ -237,7 +237,7 @@ function runStaticWasm() {
     appendInfo(renamed)
   }
   if (compiled) {
-    instantiateWasm(compiled, {}).then(inst => {
+    instantiateWasm(compiled, { env: { log: x => { console.log(x); return x }}}).then(inst => {
       const result = inst.exports.main();
       prependInfo("Run result: " + result)
     }).catch(err => {

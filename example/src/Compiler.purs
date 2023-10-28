@@ -77,7 +77,8 @@ declareArrayType :: Types.Ty -> Builder S.TypeIdx
 declareArrayType = case _ of
   Types.TyArray t -> do
     elTy <- valTy t
-    Builder.declareType [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+    Builder.declareType
+      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
   _ -> unsafeCrashWith "non-array type for array literal"
 
 getFuncTask :: InitTask -> Maybe FillFunc
@@ -219,6 +220,9 @@ compileExpr expr = case expr.expr of
     idxIs <- compileExpr idx
     pure (arrayIs <> idxIs <> [ S.ArrayGet ty ])
 
+compileUnit :: S.Expr
+compileUnit = [ S.I32Const 0 ]
+
 compileBlock
   :: Array CDecl
   -> BodyBuilder S.Expr
@@ -228,8 +232,9 @@ compileBlock decls = do
       instrs <- traverse go init
       result <- compileExpr expr
       pure (Array.concat instrs <> result)
-    _ ->
-      unsafeCrashWith "block must end in an expression."
+    _ -> do
+      instrs <- traverse go decls
+      pure (Array.concat instrs <> compileUnit)
   where
   go :: CDecl -> BodyBuilder S.Expr
   go = case _ of
@@ -254,6 +259,24 @@ compileBlock decls = do
           ixInstrs <- compileExpr ix
           eInstrs <- compileExpr e
           pure (arrayVar.get <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
+    Ast.WhileD cond loopBody -> do
+      cond' <- compileExpr cond
+      loopBody' <- compileExpr loopBody
+      let blockTy = S.BlockValType Nothing
+      let neg bool = bool <> [ S.I32Eqz ]
+      pure
+        [ S.Block blockTy
+            ( neg cond'
+                <> [ S.Br_if 0 ]
+                <>
+                  [ S.Loop blockTy
+                      ( loopBody'
+                          <> neg cond'
+                          <> [ S.Br_if 1, S.Br 0 ]
+                      )
+                  ]
+            )
+        ]
 
 accessVar :: Var -> BodyBuilder { get :: S.Expr, set :: S.Expr }
 accessVar v = case v of

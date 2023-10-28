@@ -195,6 +195,12 @@ inferDecls initialCtx initialDecls = do
         Ast.ExprD expr -> do
           expr' <- inferExpr ctx expr
           pure { ctx, decls: Array.snoc decls (Ast.ExprD expr') }
+        Ast.WhileD cond expr -> do
+          cond' <- inferExpr ctx cond
+          checkTy TyBool (typeOf cond')
+          expr' <- inferExpr ctx expr
+          checkTy TyUnit (typeOf expr')
+          pure { ctx, decls: Array.snoc decls (Ast.WhileD cond' expr') }
     )
     { ctx: initialCtx, decls: [] }
     initialDecls

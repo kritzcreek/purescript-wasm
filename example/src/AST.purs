@@ -39,6 +39,7 @@ data Decl note name
   = LetD name (Expr note name)
   | SetD (SetTarget note name) (Expr note name)
   | ExprD (Expr note name)
+  | WhileD (Expr note name) (Expr note name)
 
 derive instance genericDecl :: Generic (Decl note name) _
 instance showDecl :: (Show note, Show name) => Show (Decl note name) where

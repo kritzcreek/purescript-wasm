@@ -146,6 +146,7 @@ decl :: Parser (Decl Unit String)
 decl = defer \_ ->
   LetD <$> (l.reserved "let" *> l.identifier <* l.symbol "=") <*> expr
     <|> SetD <$> (l.reserved "set" *> setTarget <* l.symbol "=") <*> expr
+    <|> WhileD <$> (l.reserved "while" *> expr) <*> block
     <|> ExprD <$> expr
 
 setTarget :: Parser (SetTarget Unit String)

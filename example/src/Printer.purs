@@ -107,6 +107,8 @@ renderDecl renderOptions = case _ of
     (text "set" <+> renderSetTarget renderOptions setTarget <+> text "=") </> renderExpr renderOptions expr
   ExprD expr ->
     renderExpr renderOptions expr
+  WhileD cond expr ->
+    text "while" <+> renderExpr renderOptions cond <+> renderExpr renderOptions expr
 
 renderSetTarget :: forall a note name. RenderOptions note name a -> SetTarget note name -> Doc a
 renderSetTarget renderOptions = case _ of
