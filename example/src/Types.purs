@@ -11,9 +11,8 @@ import Data.Either as Either
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (for_, traverse, traverse_)
 import Data.Tuple (Tuple(..))
-import Partial.Unsafe (unsafeCrashWith)
 
 type TypedExpr = Ast.Expr (Ty String) String
 type TypedSetTarget = Ast.SetTarget (Ty String) String
@@ -22,13 +21,21 @@ type TypedToplevel = Ast.Toplevel (Ty String) String
 type TypedFunc = Ast.Func (Ty String) String
 type TypedProgram = Ast.Program (Ty String) String
 
-type Ctx = { funcs :: Map String (FuncTy String), vals :: Map String (Ty String) }
+type StructFields = Array { name :: String, ty :: Ty String }
+type Ctx =
+  { funcs :: Map String (FuncTy String)
+  , vals :: Map String (Ty String)
+  , structs :: Map String StructFields
+  }
 
 addVal :: String -> Ty String -> Ctx -> Ctx
 addVal v t ctx = ctx { vals = Map.insert v t ctx.vals }
 
-lookupVal :: String -> Ctx -> Either String (Ty String)
-lookupVal v ctx = Either.note ("Unknown variable: " <> v) (Map.lookup v ctx.vals)
+lookupVal :: Ctx -> String -> Either String (Ty String)
+lookupVal ctx v = Either.note ("Unknown variable: " <> v) (Map.lookup v ctx.vals)
+
+lookupStruct :: Ctx -> String -> Either String StructFields
+lookupStruct ctx name = Either.note ("Unknown type: " <> name) (Map.lookup name ctx.structs)
 
 typeOf :: forall n1 n2. Ast.Expr (Ty n1) n2 -> Ty n1
 typeOf e = e.note
@@ -77,7 +84,7 @@ inferExpr ctx expr = case expr.expr of
   Ast.LitE lit ->
     pure { expr: Ast.LitE lit, note: inferLit lit }
   Ast.VarE v -> do
-    t <- lookupVal v ctx
+    t <- lookupVal ctx v
     pure { expr: Ast.VarE v, note: t }
   Ast.BinOpE o l r -> do
     l' <- inferExpr ctx l
@@ -158,8 +165,26 @@ inferExpr ctx expr = case expr.expr of
         pure { expr: Ast.ArrayIdxE arr' idx', note: tyEl }
       _ -> do
         Left ("Expected array type but got: " <> show (typeOf arr'))
-  Ast.StructE ty fields -> unsafeCrashWith "Not implemented"
-  Ast.StructIdxE struct idx -> unsafeCrashWith "Not implemented"
+  Ast.StructE ty fields -> do
+    expectedFields <- lookupStruct ctx ty
+    when (Array.length fields /= Array.length expectedFields) do
+      Left ("Mismatched field count when constructing " <> ty)
+    fields' <- traverse (\f -> f { expr = _ } <$> inferExpr ctx f.expr) fields
+    -- TODO: Error on duplicated field names
+    for_ fields' \f -> do
+      ef <- Either.note ("Unknown field name: " <> f.name) (Array.find (\ef -> ef.name == f.name) expectedFields)
+      checkTy ef.ty (typeOf f.expr)
+    pure { expr: Ast.StructE ty fields', note: TyCons ty }
+  Ast.StructIdxE struct idx -> do
+    struct' <- inferExpr ctx struct
+    case typeOf struct' of
+      TyCons t -> do
+        fields <- lookupStruct ctx t
+        field <- Either.note
+          ("Unknown field " <> idx <> " for type " <> show t)
+          (Array.find (\f -> f.name == idx) fields)
+        pure { expr: Ast.StructIdxE struct' idx, note: field.ty }
+      t -> Left ("Can't project out of " <> show t)
 
 inferDecls :: forall note. Ctx -> Array (Ast.Decl note String) -> Either String { ty :: Ty String, decls :: Array TypedDecl }
 inferDecls initialCtx initialDecls = do
@@ -200,10 +225,10 @@ inferSetTarget
   -> Either String { ty :: Ty String, target :: TypedSetTarget }
 inferSetTarget ctx = case _ of
   Ast.VarST v -> do
-    ty <- lookupVal v ctx
+    ty <- lookupVal ctx v
     pure { ty, target: Ast.VarST v }
   Ast.ArrayIdxST v ix -> do
-    tyArray <- lookupVal v ctx
+    tyArray <- lookupVal ctx v
     case tyArray of
       TyArray elemTy -> do
         ix' <- inferExpr ctx ix
@@ -241,13 +266,19 @@ inferToplevel ctx = case _ of
       { ctx
       , toplevel: Ast.TopFunc (f { body = body })
       }
-  Ast.TopStruct name fields ->
-    unsafeCrashWith "Not implemented"
+  Ast.TopStruct name fields -> do
+    let ctx' = ctx { structs = Map.insert name fields ctx.structs }
+    -- TODO: Check field types to refer to existing types
+    pure
+      { ctx: ctx'
+      , toplevel: Ast.TopStruct name fields
+      }
 
+-- TODO Should forward declare all funcs and types
 inferProgram :: forall note. Ast.Program note String -> Either String TypedProgram
 inferProgram toplevels = do
   let funcTys = Array.mapMaybe topFuncTy toplevels
-  let funcCtx = { funcs: Map.fromFoldable funcTys, vals: Map.empty }
+  let funcCtx = { funcs: Map.fromFoldable funcTys, vals: Map.empty, structs: Map.empty }
   result <- Array.foldM
     ( \acc toplevel -> do
         { ctx: newCtx, toplevel: toplevel' } <- inferToplevel acc.ctx toplevel

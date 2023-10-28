@@ -17,11 +17,11 @@ import WasmBuilder as Builder
 type Builder = Builder.Builder Var
 type BodyBuilder = Builder.BodyBuilder Var
 
-type CFunc = Ast.Func (Ast.Ty String) Var
-type CExpr = Ast.Expr (Ast.Ty String) Var
-type CDecl = Ast.Decl (Ast.Ty String) Var
-type CToplevel = Ast.Toplevel (Ast.Ty String) Var
-type CProgram = Ast.Program (Ast.Ty String) Var
+type CFunc = Ast.Func (Ast.Ty Var) Var
+type CExpr = Ast.Expr (Ast.Ty Var) Var
+type CDecl = Ast.Decl (Ast.Ty Var) Var
+type CToplevel = Ast.Toplevel (Ast.Ty Var) Var
+type CProgram = Ast.Program (Ast.Ty Var) Var
 
 data InitTask = FuncTask FillFunc | GlobalTask InitGlobal
 
@@ -44,7 +44,7 @@ f32 = S.NumType S.F32
 typeOf :: CExpr -> Builder S.ValType
 typeOf e = valTy (Types.typeOf e)
 
-valTy :: Ast.Ty String -> Builder S.ValType
+valTy :: Ast.Ty Var -> Builder S.ValType
 valTy = case _ of
   Ast.TyI32 -> pure i32
   Ast.TyF32 -> pure f32
@@ -58,7 +58,7 @@ valTy = case _ of
   Ast.TyCons v ->
     unsafeCrashWith "TODO"
 
-funcTy :: Ast.FuncTy String -> Builder S.FuncType
+funcTy :: Ast.FuncTy Var -> Builder S.FuncType
 funcTy = case _ of
   Ast.FuncTy arguments result -> do
     arguments' <- traverse valTy arguments

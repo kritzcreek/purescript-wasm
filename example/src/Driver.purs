@@ -29,5 +29,8 @@ renameProgram input =
   case Parser.parseProgram input of
     Left err -> unsafeCrashWith ("Failed to parse with: " <> show err)
     Right program -> do
-      let { result, nameMap } = Rename.renameProgram program
-      Printer.printProgram Printer.renderNone result
+      case Types.inferProgram program of
+        Left err -> unsafeCrashWith ("Failed to typecheck with: " <> err)
+        Right typed -> do
+          let { result, nameMap } = Rename.renameProgram typed
+          Printer.printProgram (Printer.renderAll nameMap) result
