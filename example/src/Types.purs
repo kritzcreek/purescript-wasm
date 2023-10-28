@@ -2,6 +2,7 @@ module Types where
 
 import Prelude
 
+import Ast (FuncTy(..), Ty(..))
 import Ast as Ast
 import Builtins as Builtins
 import Data.Array as Array
@@ -13,40 +14,6 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, traverse_)
 import Data.Tuple (Tuple(..))
 import Partial.Unsafe (unsafeCrashWith)
-
-data Ty name
-  = TyI32
-  | TyF32
-  | TyBool
-  | TyUnit
-  | TyArray (Ty name)
-  | TyCons name
-
-showTy :: forall name. Show name => Ty name -> String
-showTy = case _ of
-  TyI32 -> "i32"
-  TyF32 -> "f32"
-  TyBool -> "bool"
-  TyUnit -> "unit"
-  TyArray t -> "[" <> showTy t <> "]"
-  TyCons c -> show c
-
-instance Show name => Show (Ty name) where
-  show = showTy
-
-convertTy :: forall name. Ast.ValTy name -> Ty name
-convertTy = case _ of
-  Ast.TyI32 -> TyI32
-  Ast.TyF32 -> TyF32
-  Ast.TyBool -> TyBool
-  Ast.TyUnit -> TyUnit
-  Ast.TyArray t -> TyArray (convertTy t)
-  Ast.TyCons c -> TyCons c
-
-data FuncTy name = FuncTy (Array (Ty name)) (Ty name)
-
-convertFuncTy :: forall name. Ast.FuncTy name -> FuncTy name
-convertFuncTy (Ast.FuncTy params result) = FuncTy (map convertTy params) (convertTy result)
 
 type TypedExpr = Ast.Expr (Ty String) String
 type TypedSetTarget = Ast.SetTarget (Ty String) String
@@ -63,7 +30,7 @@ addVal v t ctx = ctx { vals = Map.insert v t ctx.vals }
 lookupVal :: String -> Ctx -> Either String (Ty String)
 lookupVal v ctx = Either.note ("Unknown variable: " <> v) (Map.lookup v ctx.vals)
 
-typeOf :: forall name. Ast.Expr (Ty name) name -> Ty name
+typeOf :: forall n1 n2. Ast.Expr (Ty n1) n2 -> Ty n1
 typeOf e = e.note
 
 checkTy :: Ty String -> Ty String -> Either String Unit
@@ -142,7 +109,7 @@ inferExpr ctx expr = case expr.expr of
   Ast.CallE fn args -> do
     let
       funcTy = case Builtins.find fn of
-        Just { ty } -> Just (convertFuncTy ty)
+        Just { ty } -> Just ty
         Nothing -> Map.lookup fn ctx.funcs
     FuncTy argTys resTy <- Either.note ("Unknown func: " <> fn) funcTy
     if Array.length args /= Array.length argTys then
@@ -253,10 +220,10 @@ inferLit = case _ of
 topFuncTy :: forall note. Ast.Toplevel note String -> Maybe (Tuple String (FuncTy String))
 topFuncTy = case _ of
   Ast.TopFunc f -> do
-    let ty = FuncTy (map (convertTy <<< _.ty) f.params) (convertTy f.returnTy)
+    let ty = FuncTy (map _.ty f.params) f.returnTy
     Just (Tuple f.name ty)
   Ast.TopImport name ty _ ->
-    Just (Tuple name (convertFuncTy ty))
+    Just (Tuple name ty)
   _ -> Nothing
 
 inferToplevel :: forall note. Ctx -> Ast.Toplevel note String -> Either String { ctx :: Ctx, toplevel :: TypedToplevel }
@@ -267,9 +234,9 @@ inferToplevel ctx = case _ of
   Ast.TopImport name ty externalName ->
     pure { ctx, toplevel: Ast.TopImport name ty externalName }
   Ast.TopFunc f -> do
-    let ctx' = Array.foldl (\c param -> addVal param.name (convertTy param.ty) c) ctx f.params
+    let ctx' = Array.foldl (\c param -> addVal param.name param.ty c) ctx f.params
     body <- inferExpr ctx' f.body
-    checkTy (convertTy f.returnTy) (typeOf body)
+    checkTy f.returnTy (typeOf body)
     pure
       { ctx
       , toplevel: Ast.TopFunc (f { body = body })

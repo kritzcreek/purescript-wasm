@@ -2,7 +2,7 @@ module Printer (printFuncs, printProgram, printExpr, printDecl, renderAll, rende
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), Ty(..))
 import Data.Array as Array
 import Data.Map (Map)
 import Data.Map as Map
@@ -10,22 +10,23 @@ import Data.Maybe as Maybe
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
 import Rename as Rename
-import Types as Types
 
 type RenderOptions note name a =
   { renderNote :: note -> Doc a -> Doc a
   , renderName :: name -> Doc a
   }
 
-renderTyNote :: forall a. Types.Ty -> Doc a -> Doc a
-renderTyNote ty doc = parens (doc <+> text ":" <+> text (Types.showTy ty))
+renderTyNote :: forall a. (Rename.Var -> Doc a) -> Ty Rename.Var -> Doc a -> Doc a
+renderTyNote renderName ty doc = parens (doc <+> text ":" <+> renderTy renderName ty)
 
-renderAll :: forall a. Map Rename.Var String -> RenderOptions Types.Ty Rename.Var a
-renderAll nameMap =
-  { renderNote: renderTyNote
-  , renderName: case _ of
+renderAll :: forall a. Map Rename.Var String -> RenderOptions (Ty Rename.Var) Rename.Var a
+renderAll nameMap = do
+  let
+    renderName = case _ of
       Rename.BuiltinV n -> text n.name
       v -> text (Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap))
+  { renderNote: renderTyNote renderName
+  , renderName
   }
 
 renderNone :: forall a note name. Show name => RenderOptions note name a
@@ -136,27 +137,28 @@ renderFunc renderOptions func = do
     paramD =
       parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderParam func.params))
     returnTyD = case func.returnTy of
-      TyUnit -> D.space <> text ":" <+> renderValTy renderOptions func.returnTy
-      _ ->  mempty
+      TyUnit -> D.space <> text ":" <+> renderTy renderOptions.renderName func.returnTy
+      _ -> mempty
     bodyD = renderExpr renderOptions func.body
   (headerD <+> paramD <> returnTyD <+> text "=") </> indent bodyD
   where
-  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderValTy renderOptions ty
+  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderTy renderOptions.renderName ty
 
-renderValTy :: forall a note name. RenderOptions note name a -> ValTy name -> Doc a
-renderValTy renderOptions = case _ of
+renderTy :: forall a name. (name -> Doc a) -> Ty name -> Doc a
+renderTy renderName = case _ of
   TyI32 -> text "i32"
   TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
-  TyArray t -> text "[" <> renderValTy renderOptions t <> text "]"
-  TyCons c -> renderOptions.renderName c
+  TyArray t -> text "[" <> renderTy renderName t <> text "]"
+  TyCons c -> renderName c
 
 renderFuncTy :: forall a note name. RenderOptions note name a -> FuncTy name -> Doc a
 renderFuncTy renderOptions = case _ of
   FuncTy arguments result ->
-    parens (D.foldWithSeparator (text "," <> D.space) (map (renderValTy renderOptions) arguments))
-    <+> text "->" <+> renderValTy renderOptions result
+    parens (D.foldWithSeparator (text "," <> D.space) (map (renderTy renderOptions.renderName) arguments))
+      <+> text "->"
+      <+> renderTy renderOptions.renderName result
 
 renderToplevel :: forall a note name. RenderOptions note name a -> Toplevel note name -> Doc a
 renderToplevel renderOptions = case _ of
@@ -164,7 +166,7 @@ renderToplevel renderOptions = case _ of
   TopLet name init ->
     (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions init <> text ";"
   TopStruct name fields -> do
-    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderValTy renderOptions ty
+    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderTy renderOptions.renderName ty
     (text "struct" <+> renderOptions.renderName name)
       </> curlies (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields))
   TopImport name ty externalName ->

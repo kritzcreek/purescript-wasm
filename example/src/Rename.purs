@@ -2,7 +2,7 @@ module Rename (Var(..), printVar, renameProgram) where
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Program, SetTarget(..), Toplevel(..))
+import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Program, SetTarget(..), Toplevel(..), Ty(..))
 import Builtins as Builtins
 import Control.Monad.State (State)
 import Control.Monad.State as State
@@ -98,8 +98,8 @@ lookupFunc name =
     Just bi -> pure (BuiltinV bi)
     Nothing -> lookupVar name
 
-lookupType :: String -> Rename TypeInfo
-lookupType name = do
+lookupTy :: String -> Rename TypeInfo
+lookupTy name = do
   State.gets (\s -> unsafePartial Maybe.fromJust (Map.lookup name s.types))
 
 lookupField :: String -> TypeInfo -> Var
@@ -125,20 +125,26 @@ renameToplevel :: forall note. Toplevel note String -> Rename (Toplevel note Var
 renameToplevel = case _ of
   TopImport name ty externalName -> do
     var <- mkVar FunctionV name
-    pure (TopImport var ty externalName)
+    ty' <- renameFuncTy ty
+    pure (TopImport var ty' externalName)
   TopFunc { name, export, params, returnTy, body } -> do
     nameVar <- mkVar FunctionV name
     withBlock do
-      paramVars <- traverse (\p -> map { name: _, ty: p.ty } (mkVar LocalV p.name)) params
+      paramVars <- traverse (\p -> { name: _, ty: _ } <$> mkVar LocalV p.name <*> renameTy p.ty) params
       body' <- renameExpr body
-      pure (TopFunc { name: nameVar, export, params: paramVars, returnTy, body: body' })
+      returnTy' <- renameTy returnTy
+      pure (TopFunc { name: nameVar, export, params: paramVars, returnTy: returnTy', body: body' })
   TopLet name expr -> do
     expr' <- renameExpr expr
     var <- mkVar GlobalV name
     pure (TopLet var expr')
   TopStruct name fields -> do
-    tyInfo <- lookupType name
-    pure (TopStruct tyInfo.var (map (\f -> f { name = lookupField f.name tyInfo }) fields))
+    tyInfo <- lookupTy name
+    fields' <- for fields \f -> do
+      let name' = lookupField f.name tyInfo
+      ty' <- renameTy f.ty
+      pure { name: name', ty: ty' }
+    pure (TopStruct tyInfo.var fields')
 
 renameExpr :: forall note. Expr note String -> Rename (Expr note Var)
 renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
@@ -172,15 +178,12 @@ renameExpr expr = map { note: expr.note, expr: _ } case expr.expr of
     arr' <- renameExpr arr
     idx' <- renameExpr idx
     pure (ArrayIdxE arr' idx')
-  ArrayIdxE arr idx -> do
-    arr' <- renameExpr arr
-    idx' <- renameExpr idx
-    pure (ArrayIdxE arr' idx')
   StructE ty fields -> do
-    tyInfo <- lookupType ty
-    fields' <- for fields \{ name, expr: e } -> do
-      expr' <- renameExpr e
-      pure { name: lookupField name tyInfo, expr: expr' }
+    tyInfo <- lookupTy ty
+    fields' <- for fields \field -> do
+      let name' = lookupField field.name tyInfo
+      expr' <- renameExpr field.expr
+      pure { name: name', expr: expr' }
     pure (StructE tyInfo.var fields')
   StructIdxE struct idx -> do
     unsafeCrashWith "not implemented"
@@ -218,3 +221,20 @@ renameSetTarget = case _ of
     var <- lookupVar binder
     ix' <- renameExpr ix
     pure (ArrayIdxST var ix')
+
+renameFuncTy :: FuncTy String -> Rename (FuncTy Var)
+renameFuncTy (FuncTy args result) = do
+  args' <- traverse renameTy args
+  result' <- renameTy result
+  pure (FuncTy args' result')
+
+renameTy :: Ty String -> Rename (Ty Var)
+renameTy = case _ of
+  TyI32 -> pure TyI32
+  TyF32 -> pure TyF32
+  TyBool -> pure TyBool
+  TyUnit -> pure TyUnit
+  TyArray t -> map TyArray (renameTy t)
+  TyCons n -> do
+    tyInfo <- lookupTy n
+    pure (TyCons tyInfo.var)

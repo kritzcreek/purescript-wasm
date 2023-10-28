@@ -5,7 +5,7 @@ module Parser
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Intrinsic(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), FuncTy(..), Intrinsic(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), Ty(..))
 import Control.Alt ((<|>))
 import Control.Lazy (defer)
 import Data.Array as Array
@@ -207,7 +207,7 @@ setTarget = do
     Nothing -> pure (VarST name)
     Just ix -> pure (ArrayIdxST name ix)
 
-valTy :: Parser (ValTy String)
+valTy :: Parser (Ty String)
 valTy = defer \_ ->
   l.reserved "i32" $> TyI32
     <|> l.reserved "f32" $> TyF32
@@ -232,7 +232,7 @@ topFunc = ado
   body <- expr
   in TopFunc { name, export: Just name, params: Array.fromFoldable params, returnTy, body }
 
-param :: Parser { name :: String, ty :: ValTy String }
+param :: Parser { name :: String, ty :: Ty String }
 param = ado
   name <- lowerIdent
   _ <- l.symbol ":"
