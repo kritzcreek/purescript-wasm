@@ -55,8 +55,9 @@ valTy = case _ of
     ix <- Builder.declareType
       [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
-  Ast.TyCons v ->
-    unsafeCrashWith "TODO"
+  Ast.TyCons v -> do
+    Tuple structTy _ <- Builder.lookupStruct v
+    pure (S.RefType (S.HeapTypeRef true (S.IndexHt structTy)))
 
 funcTy :: Ast.FuncTy Var -> Builder S.FuncType
 funcTy = case _ of
@@ -120,7 +121,9 @@ declareToplevel = case _ of
           t@(Ast.TyArray _) -> do
             arrTy <- declareArrayType t
             pure [ S.RefNull (S.IndexHt arrTy) ]
-          Ast.TyCons v -> unsafeCrashWith "TODO"
+          Ast.TyCons v -> do
+            Tuple structTy _ <- Builder.lookupStruct v
+            pure [ S.RefNull (S.IndexHt structTy) ]
         idx <- Builder.declareGlobal name { mutability: S.Var, type: ty } expr
         pure (Just (GlobalTask { idx, init }))
   Ast.TopFunc func -> do
@@ -133,8 +136,12 @@ declareToplevel = case _ of
     tyIdx <- Builder.declareFuncType =<< funcTy ty
     _ <- Builder.declareImport name "env" externalName tyIdx
     pure Nothing
-  Ast.TopStruct name field ->
-    unsafeCrashWith "TODO"
+  Ast.TopStruct name fields -> do
+    fields' <- for fields \field -> do
+      fieldTy <- valTy field.ty
+      pure { name: field.name, ty: { mutability: S.Var, ty: S.StorageVal fieldTy } }
+    _ <- Builder.declareStructType name fields'
+    pure Nothing
 
 compileConst :: forall a b. Ast.Expr a b -> Maybe S.Expr
 compileConst e = case e.expr of
@@ -222,10 +229,24 @@ compileExpr expr = case expr.expr of
     arrayIs <- compileExpr array
     idxIs <- compileExpr idx
     pure (arrayIs <> idxIs <> [ S.ArrayGet ty ])
-  Ast.StructE name fields ->
-    unsafeCrashWith "TODO"
-  Ast.StructIdxE expr index ->
-    unsafeCrashWith "TODO"
+  Ast.StructE name fields -> do
+    Tuple structTy fieldOrder <- Builder.liftBuilder (Builder.lookupStruct name)
+    compiledFields <- for fields \f -> do
+      fExpr <- compileExpr f.expr
+      pure { name: f.name, instrs: fExpr }
+    let
+      is = map
+        ( \fieldName ->
+            case Array.find (\f -> f.name == fieldName) compiledFields of
+              Nothing -> unsafeCrashWith ("missing field: " <> show fieldName)
+              Just { instrs } -> instrs
+        )
+        fieldOrder
+    pure (Array.fold is <> [ S.StructNew structTy ])
+  Ast.StructIdxE structExpr index -> do
+    expr' <- compileExpr structExpr
+    (Tuple tyIdx fIdx) <- Builder.liftBuilder (Builder.lookupField index)
+    pure (expr' <> [ S.StructGet tyIdx fIdx ])
 
 compileUnit :: S.Expr
 compileUnit = [ S.I32Const 0 ]
