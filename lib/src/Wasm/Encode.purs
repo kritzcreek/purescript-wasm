@@ -321,6 +321,34 @@ write_instr b = case _ of
   S.RefFunc idx -> do
     DBuffer.addByte b 0xD2
     write_u32 b idx
+  S.StructNew x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 0
+    write_u32 b x
+  S.StructNewDefault x -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 1
+    write_u32 b x
+  S.StructGet x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 2
+    write_u32 b x
+    write_u32 b y
+  S.StructGet_s x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 3
+    write_u32 b x
+    write_u32 b y
+  S.StructGet_u x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 4
+    write_u32 b x
+    write_u32 b y
+  S.StructSet x y -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 5
+    write_u32 b x
+    write_u32 b y
   S.ArrayNew x -> do
     DBuffer.addByte b 0xFB
     write_u32 b 6

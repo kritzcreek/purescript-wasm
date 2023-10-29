@@ -111,6 +111,7 @@ type MemoryIdx = Int
 type TableIdx = Int
 type DataIdx = Int
 type ElemIdx = Int
+type FieldIdx = Int
 
 type Expr = Array Instruction
 
@@ -200,6 +201,13 @@ data Instruction
   | ArrayCopy TypeIdx TypeIdx
   | ArrayInitData TypeIdx DataIdx
   | ArrayInitElem TypeIdx ElemIdx
+
+  | StructNew TypeIdx
+  | StructNewDefault TypeIdx
+  | StructGet TypeIdx FieldIdx
+  | StructGet_s TypeIdx FieldIdx
+  | StructGet_u TypeIdx FieldIdx
+  | StructSet TypeIdx FieldIdx
 
   -- Parametric Instructions
   | Drop
@@ -321,6 +329,12 @@ instance Show Instruction where
     ArrayCopy x y -> "array.copy " <> show x <> " " <> show y
     ArrayInitData x y -> "array.init_data " <> show x <> " " <> show y
     ArrayInitElem x y -> "array.init_elem " <> show x <> " " <> show y
+    StructNew x -> "struct.new " <> show x
+    StructNewDefault x -> "struct.new_default " <> show x
+    StructGet x y -> "struct.get " <> show x <> " " <> show y
+    StructGet_s x y -> "struct.get_s " <> show x <> " " <> show y
+    StructGet_u x y -> "struct.get_u " <> show x <> " " <> show y
+    StructSet x y -> "struct.set " <> show x <> " " <> show y
     Drop -> "drop"
     Select Nothing -> "select"
     Select (Just tys) -> "select " <> String.joinWith " " (map show tys)
