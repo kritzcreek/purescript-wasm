@@ -60,8 +60,9 @@ instance showDecl :: (Show note, Show name) => Show (Decl note name) where
   show x = genericShow x
 
 data SetTarget note name
-  = VarST name
-  | ArrayIdxST name (Expr note name)
+  = VarST note name
+  | ArrayIdxST note name (Expr note name)
+  | StructIdxST note name name
 
 derive instance Generic (SetTarget note name) _
 instance (Show note, Show name) => Show (SetTarget note name) where

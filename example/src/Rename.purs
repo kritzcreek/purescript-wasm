@@ -221,13 +221,23 @@ renameSetTarget
   :: SetTarget (Ty String) String
   -> Rename (SetTarget (Ty Var) Var)
 renameSetTarget = case _ of
-  VarST binder -> do
+  VarST t binder -> do
+    t' <- renameTy t
     var <- lookupVar binder
-    pure (VarST var)
-  ArrayIdxST binder ix -> do
+    pure (VarST t' var)
+  ArrayIdxST t binder ix -> do
+    t' <- renameTy t
     var <- lookupVar binder
     ix' <- renameExpr ix
-    pure (ArrayIdxST var ix')
+    pure (ArrayIdxST t' var ix')
+  StructIdxST t binder ix -> do
+    ty <- case t of
+      TyCons t' -> lookupTy t'
+      _ -> unsafeCrashWith "tried to rename non-struct assignment"
+    t' <- renameTy t
+    binder' <- lookupVar binder
+    let field = lookupField ix ty
+    pure (StructIdxST t' binder' field)
 
 renameFuncTy :: FuncTy String -> Rename (FuncTy Var)
 renameFuncTy (FuncTy args result) = do

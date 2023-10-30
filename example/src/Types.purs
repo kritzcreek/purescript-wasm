@@ -224,17 +224,25 @@ inferSetTarget
   -> Ast.SetTarget note String
   -> Either String { ty :: Ty String, target :: TypedSetTarget }
 inferSetTarget ctx = case _ of
-  Ast.VarST v -> do
+  Ast.VarST _ v -> do
     ty <- lookupVal ctx v
-    pure { ty, target: Ast.VarST v }
-  Ast.ArrayIdxST v ix -> do
+    pure { ty, target: Ast.VarST ty v }
+  Ast.ArrayIdxST _ v ix -> do
     tyArray <- lookupVal ctx v
     case tyArray of
       TyArray elemTy -> do
         ix' <- inferExpr ctx ix
         checkTy TyI32 (typeOf ix')
-        pure { ty: elemTy, target: Ast.ArrayIdxST v ix' }
+        pure { ty: elemTy, target: Ast.ArrayIdxST tyArray v ix' }
       _ -> Left ("Tried to assign to a non-array target " <> show tyArray)
+  Ast.StructIdxST _ v ix -> do
+    tyCons <- lookupVal ctx v
+    case tyCons of
+      TyCons tyStruct -> do
+        sfs <- lookupStruct ctx tyStruct
+        field <- Either.note "Tried to assign to non-existing field" (Array.find (\field -> field.name == ix) sfs)
+        pure { ty: field.ty, target: Ast.StructIdxST tyCons v ix }
+      _ -> Left ("Tried to assign to a non-struct target " <> show tyCons)
 
 inferLit :: forall name. Ast.Lit -> Ty name
 inferLit = case _ of

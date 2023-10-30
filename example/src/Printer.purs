@@ -125,10 +125,12 @@ renderDecl renderOptions = case _ of
 
 renderSetTarget :: forall a note name. RenderOptions note name a -> SetTarget note name -> Doc a
 renderSetTarget renderOptions = case _ of
-  VarST n ->
-    renderOptions.renderName n
-  ArrayIdxST n ix ->
-    renderOptions.renderName n <> brackets (renderExpr renderOptions ix)
+  VarST ty n ->
+    renderOptions.renderNote ty (renderOptions.renderName n)
+  ArrayIdxST ty n ix ->
+    renderOptions.renderNote ty (renderOptions.renderName n) <> brackets (renderExpr renderOptions ix)
+  StructIdxST ty n ix ->
+    renderOptions.renderNote ty (renderOptions.renderName n) <> text "." <> renderOptions.renderName ix
 
 renderFunc :: forall a note name. RenderOptions note name a -> Func note name -> Doc a
 renderFunc renderOptions func = do

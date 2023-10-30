@@ -204,8 +204,10 @@ setTarget :: Parser (SetTarget Unit String)
 setTarget = do
   name <- lowerIdent
   C.optionMaybe (l.brackets expr) >>= case _ of
-    Nothing -> pure (VarST name)
-    Just ix -> pure (ArrayIdxST name ix)
+    Nothing -> C.optionMaybe (PS.char '.' *> lowerIdent) >>= case _ of
+      Nothing -> pure (VarST unit name)
+      Just ix -> pure (StructIdxST unit name ix)
+    Just ix -> pure (ArrayIdxST unit name ix)
 
 valTy :: Parser (Ty String)
 valTy = defer \_ ->

@@ -276,17 +276,21 @@ compileBlock decls = do
       pure (is <> [ S.LocalSet var ])
     Ast.SetD t e -> do
       case t of
-        Ast.VarST n -> do
+        Ast.VarST _ n -> do
           var <- accessVar n
           is <- compileExpr e
           pure (is <> var.set)
-        Ast.ArrayIdxST n ix -> do
-          let elemType = Types.typeOf e
-          tyArray <- Builder.liftBuilder (declareArrayType (Ast.TyArray elemType))
+        Ast.ArrayIdxST ty n ix -> do
+          tyArray <- Builder.liftBuilder (declareArrayType ty)
           arrayVar <- accessVar n
           ixInstrs <- compileExpr ix
           eInstrs <- compileExpr e
           pure (arrayVar.get <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
+        Ast.StructIdxST _ n ix -> do
+          Tuple structIdx fieldIdx <- Builder.liftBuilder (Builder.lookupField ix)
+          structVar <- accessVar n
+          eInstrs <- compileExpr e
+          pure (structVar.get <> eInstrs <> [S.StructSet structIdx fieldIdx])
     Ast.WhileD cond loopBody -> do
       cond' <- compileExpr cond
       loopBody' <- compileExpr loopBody
