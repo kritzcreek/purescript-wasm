@@ -23,18 +23,6 @@ type CDecl = Ast.Decl (Ast.Ty Var) Var
 type CToplevel = Ast.Toplevel (Ast.Ty Var) Var
 type CProgram = Ast.Program (Ast.Ty Var) Var
 
-data InitTask = FuncTask FillFunc | GlobalTask InitGlobal
-
-type FillFunc =
-  { fill :: Array S.ValType -> S.Expr -> Builder Unit
-  , func :: CFunc
-  }
-
-type InitGlobal =
-  { idx :: S.GlobalIdx
-  , init :: CExpr
-  }
-
 i32 :: S.ValType
 i32 = S.NumType S.I32
 
@@ -50,14 +38,20 @@ valTy = case _ of
   Ast.TyF32 -> pure f32
   Ast.TyBool -> pure i32
   Ast.TyUnit -> pure i32
-  Ast.TyArray t -> do
-    elTy <- valTy t
-    ix <- Builder.declareType
-      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+  t@(Ast.TyArray _) -> do
+    ix <- declareArrayType t
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
   Ast.TyCons v -> do
-    Tuple structTy _ <- Builder.lookupStruct v
-    pure (S.RefType (S.HeapTypeRef true (S.IndexHt structTy)))
+    Tuple ix _ <- Builder.lookupStruct v
+    pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
+
+declareArrayType :: Ast.Ty Var -> Builder S.TypeIdx
+declareArrayType = case _ of
+  Ast.TyArray t -> do
+    elTy <- valTy t
+    Builder.declareType
+      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
+  _ -> unsafeCrashWith "non-array type for array literal"
 
 funcTy :: Ast.FuncTy Var -> Builder S.FuncType
 funcTy = case _ of
@@ -69,13 +63,28 @@ funcTy = case _ of
       , results: [ result' ]
       }
 
-declareArrayType :: Ast.Ty Var -> Builder S.TypeIdx
-declareArrayType = case _ of
-  Ast.TyArray t -> do
-    elTy <- valTy t
-    Builder.declareType
-      [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StorageVal elTy } } ]
-  _ -> unsafeCrashWith "non-array type for array literal"
+compileProgram :: CProgram -> S.Module
+compileProgram toplevels = Builder.build' do
+  fills <- traverse declareToplevel toplevels
+  traverse_ implFunc (Array.mapMaybe (getFuncTask =<< _) fills)
+  initializeGlobals (Array.mapMaybe (getGlobalTask =<< _) fills)
+  where
+  implFunc { fill, func } = do
+    paramTys <- traverse (\v -> map (Tuple v.name) (valTy v.ty)) func.params
+    fnBody <- bodyBuild paramTys (compileExpr func.body)
+    fill fnBody.locals fnBody.result
+
+data InitTask = FuncTask FillFunc | GlobalTask InitGlobal
+
+type FillFunc =
+  { fill :: Array S.ValType -> S.Expr -> Builder Unit
+  , func :: CFunc
+  }
+
+type InitGlobal =
+  { idx :: S.GlobalIdx
+  , init :: CExpr
+  }
 
 getFuncTask :: InitTask -> Maybe FillFunc
 getFuncTask = case _ of
@@ -86,23 +95,6 @@ getGlobalTask :: InitTask -> Maybe InitGlobal
 getGlobalTask = case _ of
   GlobalTask it -> Just it
   _ -> Nothing
-
-compileProgram :: CProgram -> S.Module
-compileProgram toplevels = Builder.build' do
-  fills <- traverse declareToplevel toplevels
-  traverse_ implFunc (Array.mapMaybe (getFuncTask =<< _) fills)
-  initializeGlobals (Array.mapMaybe (getGlobalTask =<< _) fills)
-
-initializeGlobals :: Array InitGlobal -> Builder Unit
-initializeGlobals igs = do
-  fill <- Builder.declareFunc (FunctionV (-1)) { arguments: [], results: [] }
-  fnBody <- bodyBuild [] do
-    iss <- for igs \ig -> do
-      is <- compileExpr ig.init
-      pure (is <> [ S.GlobalSet ig.idx ])
-    pure (Array.fold iss)
-  fill fnBody.locals fnBody.result
-  Builder.declareStart (FunctionV (-1))
 
 declareToplevel :: CToplevel -> Builder (Maybe InitTask)
 declareToplevel = case _ of
@@ -142,6 +134,23 @@ declareToplevel = case _ of
       pure { name: field.name, ty: { mutability: S.Var, ty: S.StorageVal fieldTy } }
     _ <- Builder.declareStructType name fields'
     pure Nothing
+
+declareFunc :: CFunc -> Builder FillFunc
+declareFunc func = do
+  fTy <- funcTy (Ast.funcTyOf func)
+  fill <- Builder.declareFunc func.name fTy
+  pure { fill, func }
+
+initializeGlobals :: Array InitGlobal -> Builder Unit
+initializeGlobals igs = do
+  fill <- Builder.declareFunc (FunctionV (-1)) { arguments: [], results: [] }
+  fnBody <- bodyBuild [] do
+    iss <- for igs \ig -> do
+      is <- compileExpr ig.init
+      pure (is <> [ S.GlobalSet ig.idx ])
+    pure (Array.fold iss)
+  fill fnBody.locals fnBody.result
+  Builder.declareStart (FunctionV (-1))
 
 compileConst :: forall a b. Ast.Expr a b -> Maybe S.Expr
 compileConst e = case e.expr of
@@ -259,58 +268,58 @@ compileBlock
 compileBlock decls = do
   case Array.unsnoc decls of
     Just { init, last: Ast.ExprD expr } -> do
-      instrs <- traverse go init
+      instrs <- traverse compileDecl init
       result <- compileExpr expr
       pure (Array.concat instrs <> result)
     _ -> do
-      instrs <- traverse go decls
+      instrs <- traverse compileDecl decls
       pure (Array.concat instrs <> compileUnit)
-  where
-  go :: CDecl -> BodyBuilder S.Expr
-  go = case _ of
-    Ast.ExprD expr -> do
-      is <- compileExpr expr
-      pure (is <> [ S.Drop ])
-    Ast.LetD n e -> do
-      ty <- Builder.liftBuilder (typeOf e)
-      var <- Builder.newLocal n ty
-      is <- compileExpr e
-      pure (is <> [ S.LocalSet var ])
-    Ast.SetD t e -> do
-      case t of
-        Ast.VarST _ n -> do
-          var <- accessVar n
-          is <- compileExpr e
-          pure (is <> var.set)
-        Ast.ArrayIdxST ty n ix -> do
-          tyArray <- Builder.liftBuilder (declareArrayType ty)
-          arrayVar <- accessVar n
-          ixInstrs <- compileExpr ix
-          eInstrs <- compileExpr e
-          pure (arrayVar.get <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
-        Ast.StructIdxST _ n ix -> do
-          Tuple structIdx fieldIdx <- Builder.liftBuilder (Builder.lookupField ix)
-          structVar <- accessVar n
-          eInstrs <- compileExpr e
-          pure (structVar.get <> eInstrs <> [S.StructSet structIdx fieldIdx])
-    Ast.WhileD cond loopBody -> do
-      cond' <- compileExpr cond
-      loopBody' <- compileExpr loopBody
-      let blockTy = S.BlockValType Nothing
-      let neg bool = bool <> [ S.I32Eqz ]
-      pure
-        [ S.Block blockTy
-            ( neg cond'
-                <> [ S.Br_if 0 ]
-                <>
-                  [ S.Loop blockTy
-                      ( loopBody'
-                          <> neg cond'
-                          <> [ S.Br_if 1, S.Br 0 ]
-                      )
-                  ]
-            )
-        ]
+
+compileDecl :: CDecl -> BodyBuilder S.Expr
+compileDecl = case _ of
+  Ast.ExprD expr -> do
+    is <- compileExpr expr
+    pure (is <> [ S.Drop ])
+  Ast.LetD n e -> do
+    ty <- Builder.liftBuilder (typeOf e)
+    var <- Builder.newLocal n ty
+    is <- compileExpr e
+    pure (is <> [ S.LocalSet var ])
+  Ast.SetD t e -> do
+    case t of
+      Ast.VarST _ n -> do
+        var <- accessVar n
+        is <- compileExpr e
+        pure (is <> var.set)
+      Ast.ArrayIdxST ty n ix -> do
+        tyArray <- Builder.liftBuilder (declareArrayType ty)
+        arrayVar <- accessVar n
+        ixInstrs <- compileExpr ix
+        eInstrs <- compileExpr e
+        pure (arrayVar.get <> ixInstrs <> eInstrs <> [ S.ArraySet tyArray ])
+      Ast.StructIdxST _ n ix -> do
+        Tuple structIdx fieldIdx <- Builder.liftBuilder (Builder.lookupField ix)
+        structVar <- accessVar n
+        eInstrs <- compileExpr e
+        pure (structVar.get <> eInstrs <> [S.StructSet structIdx fieldIdx])
+  Ast.WhileD cond loopBody -> do
+    cond' <- compileExpr cond
+    loopBody' <- compileExpr loopBody
+    let blockTy = S.BlockValType Nothing
+    let neg bool = bool <> [ S.I32Eqz ]
+    pure
+      [ S.Block blockTy
+          ( neg cond'
+              <> [ S.Br_if 0 ]
+              <>
+                [ S.Loop blockTy
+                    ( loopBody'
+                        <> neg cond'
+                        <> [ S.Br_if 1, S.Br 0 ]
+                    )
+                ]
+          )
+      ]
 
 accessVar :: Var -> BodyBuilder { get :: S.Expr, set :: S.Expr }
 accessVar v = case v of
@@ -328,15 +337,3 @@ accessVar v = case v of
     unsafeCrashWith "Can't reassign a struct"
   FieldV _ ->
     unsafeCrashWith "Can't reassign a field"
-
-declareFunc :: CFunc -> Builder FillFunc
-declareFunc func = do
-  fTy <- funcTy (Ast.funcTyOf func)
-  fill <- Builder.declareFunc func.name fTy
-  pure { fill, func }
-
-implFunc :: FillFunc -> Builder Unit
-implFunc { fill, func } = do
-  paramTys <- traverse (\v -> map (Tuple v.name) (valTy v.ty)) func.params
-  fnBody <- bodyBuild paramTys (compileExpr func.body)
-  fill fnBody.locals fnBody.result

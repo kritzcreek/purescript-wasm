@@ -5,9 +5,6 @@ module WasmBuilder
   , bodyBuild
   , build
   , build'
-  , lookupFunc
-  , callFunc
-  , callImport
   , declareType
   , declareFuncType
   , declareStructType
@@ -19,6 +16,9 @@ module WasmBuilder
   , lookupGlobal
   , lookupStruct
   , lookupField
+  , lookupFunc
+  , callFunc
+  , callImport
   , newLocal
   , lookupLocal
   , liftBuilder
@@ -370,7 +370,7 @@ bodyBuild params (BodyBuilder b) = do
     locals =
       Map.values ls
         -- remove all params
-        # List.mapMaybe (\local -> if local.index >= paramCount then Just local else Nothing)
+        # List.filter (\local -> local.index >= paramCount)
         # Array.fromFoldable
         # Array.sortWith _.index
         # map _.ty
@@ -398,7 +398,7 @@ lookupLocal name = do
   mkBodyBuilder \{ locals } -> liftEffect do
     ls <- Ref.read locals
     case Map.lookup name ls of
-      Nothing -> throw ("undeclared global: " <> show name)
+      Nothing -> throw ("undeclared local: " <> show name)
       Just { index } -> pure index
 
 liftBuilder :: forall name a. Builder name a -> BodyBuilder name a
