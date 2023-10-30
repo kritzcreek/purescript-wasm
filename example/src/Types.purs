@@ -46,6 +46,7 @@ checkTy = case _, _ of
   TyF32, TyF32 -> pure unit
   TyBool, TyBool -> pure unit
   TyUnit, TyUnit -> pure unit
+  TyText, TyText -> pure unit
   TyArray t, TyArray t' -> checkTy t t'
   TyCons t, TyCons t' | t == t' -> pure unit
   expected, actual -> Left ("Expected " <> show expected <> ", but got " <> show actual)
@@ -249,6 +250,7 @@ inferLit = case _ of
   Ast.IntLit _ -> TyI32
   Ast.FloatLit _ -> TyF32
   Ast.BoolLit _ -> TyBool
+  Ast.TextLit _ -> TyText
 
 topFuncTy :: forall note. Ast.Toplevel note String -> Maybe (Tuple String (FuncTy String))
 topFuncTy = case _ of

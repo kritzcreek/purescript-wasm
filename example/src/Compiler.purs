@@ -4,12 +4,16 @@ import Prelude
 
 import Ast as Ast
 import Data.Array as Array
+import Data.ArrayBuffer.Types (ArrayView, Uint8)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for, traverse, traverse_)
 import Data.Tuple (Tuple(..))
+import DynamicBuffer as DBuffer
+import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Rename (Var(..))
 import Types as Types
+import Unsafe.Coerce (unsafeCoerce)
 import Wasm.Syntax as S
 import WasmBuilder (bodyBuild)
 import WasmBuilder as Builder
@@ -38,12 +42,19 @@ valTy = case _ of
   Ast.TyF32 -> pure f32
   Ast.TyBool -> pure i32
   Ast.TyUnit -> pure i32
+  Ast.TyText -> do
+    ix <- textTy
+    pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
   t@(Ast.TyArray _) -> do
     ix <- declareArrayType t
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
   Ast.TyCons v -> do
     Tuple ix _ <- Builder.lookupStruct v
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
+
+textTy :: Builder S.TypeIdx
+textTy = Builder.declareType
+  [ { final: true, supertypes: [], ty: S.CompArray { mutability: S.Var, ty: S.StoragePacked S.I8 } } ]
 
 declareArrayType :: Ast.Ty Var -> Builder S.TypeIdx
 declareArrayType = case _ of
@@ -110,6 +121,9 @@ declareToplevel = case _ of
           Ast.TyBool -> pure [ S.I32Const 0 ]
           Ast.TyF32 -> pure [ S.F32Const 0.0 ]
           Ast.TyUnit -> pure [ S.I32Const 0 ]
+          Ast.TyText -> do
+            ix <- textTy
+            pure [ S.RefNull (S.IndexHt ix) ]
           t@(Ast.TyArray _) -> do
             arrTy <- declareArrayType t
             pure [ S.RefNull (S.IndexHt arrTy) ]
@@ -192,15 +206,25 @@ compileOp = case _, _ of
   t, o ->
     unsafeCrashWith ("no instruction for operand: " <> show o <> " at type: " <> show t)
 
-compileLit :: Ast.Lit -> S.Expr
+utf8Bytes :: String -> Array S.Byte
+utf8Bytes s = unsafePerformEffect do
+  bytes <- DBuffer.unsafeContents =<< DBuffer.fromUtf8 s
+  -- TODO: Scary unsafeCoerce
+  pure ((unsafeCoerce :: ArrayView Uint8 -> Array Int) bytes)
+
+compileLit :: Ast.Lit -> Builder S.Expr
 compileLit = case _ of
-  Ast.IntLit x -> [ S.I32Const x ]
-  Ast.FloatLit x -> [ S.F32Const x ]
-  Ast.BoolLit b -> [ if b then S.I32Const 1 else S.I32Const 0 ]
+  Ast.IntLit x -> pure [ S.I32Const x ]
+  Ast.FloatLit x -> pure [ S.F32Const x ]
+  Ast.BoolLit b -> pure [ if b then S.I32Const 1 else S.I32Const 0 ]
+  Ast.TextLit t -> do
+    ty <- textTy
+    ix <- Builder.declareData (utf8Bytes t) S.DataPassive
+    pure [ S.ArrayInitData ty ix ]
 
 compileExpr :: CExpr -> BodyBuilder S.Expr
 compileExpr expr = case expr.expr of
-  Ast.LitE lit -> pure (compileLit lit)
+  Ast.LitE lit -> Builder.liftBuilder (compileLit lit)
   Ast.VarE x -> map _.get (accessVar x)
   Ast.BinOpE op l r -> ado
     l' <- compileExpr l
@@ -301,7 +325,7 @@ compileDecl = case _ of
         Tuple structIdx fieldIdx <- Builder.liftBuilder (Builder.lookupField ix)
         structVar <- accessVar n
         eInstrs <- compileExpr e
-        pure (structVar.get <> eInstrs <> [S.StructSet structIdx fieldIdx])
+        pure (structVar.get <> eInstrs <> [ S.StructSet structIdx fieldIdx ])
   Ast.WhileD cond loopBody -> do
     cond' <- compileExpr cond
     loopBody' <- compileExpr loopBody

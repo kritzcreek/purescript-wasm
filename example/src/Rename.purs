@@ -251,6 +251,7 @@ renameTy = case _ of
   TyF32 -> pure TyF32
   TyBool -> pure TyBool
   TyUnit -> pure TyUnit
+  TyText -> pure TyText
   TyArray t -> map TyArray (renameTy t)
   TyCons n -> do
     tyInfo <- lookupTy n

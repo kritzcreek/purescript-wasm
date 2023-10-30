@@ -11,6 +11,7 @@ module WasmBuilder
   , declareExport
   , declareFunc
   , declareGlobal
+  , declareData
   , declareImport
   , declareStart
   , lookupGlobal
@@ -46,7 +47,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, FieldIdx, FieldType, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
+import Wasm.Syntax (Byte, CompositeType(..), Data, DataIdx, DataMode, Export, ExportDesc(..), Expr, FieldIdx, FieldType, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
 
 type FuncData =
   { index :: FuncIdx
@@ -68,6 +69,7 @@ type Env name =
   , funcsSupply :: Ref Int
   , globals :: Ref (Map name GlobalData)
   , globalsSupply :: Ref Int
+  , datas :: Ref (Array Data)
   , types :: Ref (Array RecType)
   , structs :: Ref (Map name (Tuple TypeIdx (Array name)))
   , fields :: Ref (Map name (Tuple TypeIdx FieldIdx))
@@ -84,13 +86,14 @@ initialEnv = ado
   funcsSupply <- Ref.new (-1)
   globals <- Ref.new Map.empty
   globalsSupply <- Ref.new (-1)
+  datas <- Ref.new []
   types <- Ref.new []
   structs <- Ref.new Map.empty
   fields <- Ref.new Map.empty
   memory <- Ref.new Nothing
   exports <- Ref.new []
   startFn <- Ref.new Nothing
-  in { funcs, funcsSupply, globals, globalsSupply, types, structs, fields, memory, imports, exports, startFn }
+  in { funcs, funcsSupply, globals, globalsSupply, datas, types, structs, fields, memory, imports, exports, startFn }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -144,6 +147,20 @@ lookupField name = mkBuilder \{ fields } -> do
 nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
   mkBuilder \{ globalsSupply } -> Ref.modify (_ + 1) globalsSupply
+
+declareData
+  :: forall name
+   . Array Byte
+  -> DataMode
+  -> Builder name DataIdx
+declareData init mode = do
+  mkBuilder \{ datas } -> do
+    ds <- Ref.read datas
+    case Array.findIndex (\d -> d.init == init && d.mode == mode) ds of
+      Nothing -> do
+        Ref.write (Array.snoc ds { init, mode }) datas
+        pure (Array.length ds)
+      Just ix -> pure ix
 
 declareImport
   :: forall name
@@ -303,6 +320,7 @@ buildModule env@{ types, memory, exports } = do
   imps <- buildImports env
   mem <- Ref.read memory
   exps <- Ref.read exports
+  datas' <- Ref.read env.datas
   startFn <- Ref.read env.startFn
   buildFuncs env <#> case _ of
     Left err ->
@@ -313,6 +331,7 @@ buildModule env@{ types, memory, exports } = do
             { funcs = wasmFuncs
             , globals = wasmGlobals
             , types = ts
+            , data = datas'
             , memories = Array.fromFoldable mem
             , exports = exps
             , imports = imps

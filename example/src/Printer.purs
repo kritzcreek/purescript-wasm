@@ -77,6 +77,8 @@ renderLit = case _ of
     text (show x)
   BoolLit x ->
     text (show x)
+  TextLit s ->
+    text ("\"" <> s <> "\"")
 
 -- TODO: Prec based parenthesis
 renderExpr :: forall a note name. RenderOptions note name a -> Expr note name -> Doc a
@@ -151,7 +153,8 @@ renderTy renderName = case _ of
   TyI32 -> text "i32"
   TyF32 -> text "f32"
   TyBool -> text "bool"
-  TyUnit -> text "()"
+  TyText -> text "text"
+  TyUnit -> text "unit"
   TyArray t -> text "[" <> renderTy renderName t <> text "]"
   TyCons c -> renderName c
 

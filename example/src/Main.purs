@@ -31,9 +31,11 @@ runWasm = runEffectFn1 runWasmImpl
 input :: String
 input =
   """
-fn main() : i32 = {
-  let x = [1];
-  20
+struct V2 { x : f32, y : f32 }
+
+fn main() : f32 = {
+  let v = V2 { x = 1.0, y = 2.0 };
+  v.x
 }
 """
 

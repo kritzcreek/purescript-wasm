@@ -189,6 +189,7 @@ lit :: Parser Lit
 lit = numberLit
   <|> l.reserved "true" $> BoolLit true
   <|> l.reserved "false" $> BoolLit false
+  <|> map TextLit l.stringLiteral
 
 parseExpr :: String -> Either P.ParseError (Expr Unit String)
 parseExpr i = P.runParser i (l.whiteSpace *> expr <* PS.eof)
