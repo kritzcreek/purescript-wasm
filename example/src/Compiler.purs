@@ -219,8 +219,9 @@ compileLit = case _ of
   Ast.BoolLit b -> pure [ if b then S.I32Const 1 else S.I32Const 0 ]
   Ast.TextLit t -> do
     ty <- textTy
-    ix <- Builder.declareData (utf8Bytes t) S.DataPassive
-    pure [ S.ArrayInitData ty ix ]
+    let bytes = utf8Bytes t
+    ix <- Builder.declareData bytes S.DataPassive
+    pure [ S.I32Const 0, S.I32Const (Array.length bytes - 1), S.ArrayNewData ty ix ]
 
 compileExpr :: CExpr -> BodyBuilder S.Expr
 compileExpr expr = case expr.expr of
