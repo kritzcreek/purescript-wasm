@@ -271,7 +271,7 @@ write_instr b = case _ of
     float32 b n
   S.F32Eq ->
     DBuffer.addByte b 0x5B
-  S.F32Neq ->
+  S.F32Ne ->
     DBuffer.addByte b 0x5C
   S.F32Lt ->
     DBuffer.addByte b 0x5D

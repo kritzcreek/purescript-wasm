@@ -167,6 +167,7 @@ compileOp = case _, _ of
   Ast.TyI32, Ast.Lte -> S.I32Le_s
   Ast.TyI32, Ast.Gte -> S.I32Ge_s
   Ast.TyI32, Ast.Eq -> S.I32Eq
+  Ast.TyI32, Ast.Neq -> S.I32Ne
 
   Ast.TyF32, Ast.Add -> S.F32Add
   Ast.TyF32, Ast.Sub -> S.F32Sub
@@ -177,6 +178,7 @@ compileOp = case _, _ of
   Ast.TyF32, Ast.Lte -> S.F32Le
   Ast.TyF32, Ast.Gte -> S.F32Ge
   Ast.TyF32, Ast.Eq -> S.F32Eq
+  Ast.TyF32, Ast.Neq -> S.F32Ne
 
   t, o ->
     unsafeCrashWith ("no instruction for operand: " <> show o <> " at type: " <> show t)

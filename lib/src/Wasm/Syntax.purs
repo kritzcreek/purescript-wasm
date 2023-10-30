@@ -159,7 +159,7 @@ data Instruction
 
   | F32Const Number
   | F32Eq
-  | F32Neq
+  | F32Ne
   | F32Lt
   | F32Gt
   | F32Ge
@@ -291,7 +291,7 @@ instance Show Instruction where
     I32ReinterpretF32 -> "i32.reinterpret_f32"
     F32Const x -> "f32.const " <> show x
     F32Eq -> "f32.eq"
-    F32Neq -> "f32.eq"
+    F32Ne -> "f32.ne"
     F32Lt -> "f32.lt"
     F32Gt -> "f32.gt"
     F32Ge -> "f32.ge"
