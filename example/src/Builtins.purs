@@ -84,14 +84,14 @@ f32_copysign = f32_func_unary "f32_copysign" S.F32Copysign
 f32_convert_i32_s :: Fn
 f32_convert_i32_s =
   { name: "f32_convert_i32_s"
-  , ty: FuncTy [ TyF32 ] TyI32
+  , ty: FuncTy [ TyI32 ] TyF32
   , instr: S.F32ConvertI32_s
   }
 
 f32_convert_i32_u :: Fn
 f32_convert_i32_u =
   { name: "f32_convert_i32_u"
-  , ty: FuncTy [ TyF32 ] TyI32
+  , ty: FuncTy [ TyI32 ] TyF32
   , instr: S.F32ConvertI32_u
   }
 
@@ -142,13 +142,13 @@ i32_rotr = i32_func_unary "i32_rotr" S.I32Rotr
 i32_trunc_f32_s :: Fn
 i32_trunc_f32_s =
   { name: "i32_trunc_f32_s"
-  , ty: FuncTy [ TyI32 ] TyF32
+  , ty: FuncTy [ TyF32 ] TyI32
   , instr: S.I32TruncF32_s
   }
 
 i32_reinterpret_f32 :: Fn
 i32_reinterpret_f32 =
   { name: "i32_reinterpret_f32"
-  , ty: FuncTy [ TyI32 ] TyF32
+  , ty: FuncTy [ TyF32 ] TyI32
   , instr: S.I32ReinterpretF32
   }
