@@ -2,14 +2,14 @@ module Builtins (all, find, Fn) where
 
 import Prelude
 
-import Ast (FuncTy(..), ValTy(..))
+import Ast (FuncTy(..), Ty(..))
 import Data.Array as Array
 import Data.Maybe (Maybe)
 import Wasm.Syntax as S
 
 type Fn =
   { name :: String
-  , ty :: FuncTy
+  , ty :: FuncTy String
   , instr :: S.Instruction
   }
 

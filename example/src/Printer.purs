@@ -2,7 +2,7 @@ module Printer (printFuncs, printProgram, printExpr, printDecl, renderAll, rende
 
 import Prelude
 
-import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), ValTy(..))
+import Ast (Decl(..), Expr, Expr'(..), Func, FuncTy(..), Lit(..), Op(..), Program, SetTarget(..), Toplevel(..), Ty(..))
 import Data.Array as Array
 import Data.Map (Map)
 import Data.Map as Map
@@ -10,22 +10,23 @@ import Data.Maybe as Maybe
 import Dodo (Doc, break, encloseEmptyAlt, flexGroup, indent, plainText, print, text, twoSpaces, (<+>), (</>))
 import Dodo as D
 import Rename as Rename
-import Types as Types
 
 type RenderOptions note name a =
   { renderNote :: note -> Doc a -> Doc a
   , renderName :: name -> Doc a
   }
 
-renderTyNote :: forall a. Types.Ty -> Doc a -> Doc a
-renderTyNote ty doc = parens (doc <+> text ":" <+> text (Types.showTy ty))
+renderTyNote :: forall a. (Rename.Var -> Doc a) -> Ty Rename.Var -> Doc a -> Doc a
+renderTyNote renderName ty doc = parens (doc <+> text ":" <+> renderTy renderName ty)
 
-renderAll :: forall a. Map Rename.Var String -> RenderOptions Types.Ty Rename.Var a
-renderAll nameMap =
-  { renderNote: renderTyNote
-  , renderName: case _ of
+renderAll :: forall a. Map Rename.Var String -> RenderOptions (Ty Rename.Var) Rename.Var a
+renderAll nameMap = do
+  let
+    renderName = case _ of
       Rename.BuiltinV n -> text n.name
       v -> text (Maybe.maybe "$UNKNOWN" (\n -> show v <> n) (Map.lookup v nameMap))
+  { renderNote: renderTyNote renderName
+  , renderName
   }
 
 renderNone :: forall a note name. Show name => RenderOptions note name a
@@ -98,9 +99,18 @@ renderExpr renderOptions expr = renderOptions.renderNote expr.note case expr.exp
   BlockE body ->
     curlies (D.foldWithSeparator (text ";" <> break) (map (renderDecl renderOptions) body))
   ArrayE elements ->
-    brackets (D.foldWithSeparator (text "," <> break) (map (renderExpr renderOptions) elements))
+    brackets (D.foldWithSeparator (text "," <> D.spaceBreak) (map (renderExpr renderOptions) elements))
   ArrayIdxE array index ->
     renderExpr renderOptions array <> brackets (renderExpr renderOptions index)
+  StructE name fields -> do
+    let
+      renderField { name: name', expr: expr' } =
+        renderOptions.renderName name' <+> text "=" <+> renderExpr renderOptions expr'
+      fields' =
+        D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields)
+    renderOptions.renderName name <+> curlies fields'
+  StructIdxE struct index ->
+    renderExpr renderOptions struct <> text "." <> renderOptions.renderName index
 
 renderDecl :: forall a note name. RenderOptions note name a -> Decl note name -> Doc a
 renderDecl renderOptions = case _ of
@@ -115,10 +125,12 @@ renderDecl renderOptions = case _ of
 
 renderSetTarget :: forall a note name. RenderOptions note name a -> SetTarget note name -> Doc a
 renderSetTarget renderOptions = case _ of
-  VarST n ->
-    renderOptions.renderName n
-  ArrayIdxST n ix ->
-    renderOptions.renderName n <> brackets (renderExpr renderOptions ix)
+  VarST ty n ->
+    renderOptions.renderNote ty (renderOptions.renderName n)
+  ArrayIdxST ty n ix ->
+    renderOptions.renderNote ty (renderOptions.renderName n) <> brackets (renderExpr renderOptions ix)
+  StructIdxST ty n ix ->
+    renderOptions.renderNote ty (renderOptions.renderName n) <> text "." <> renderOptions.renderName ix
 
 renderFunc :: forall a note name. RenderOptions note name a -> Func note name -> Doc a
 renderFunc renderOptions func = do
@@ -126,39 +138,44 @@ renderFunc renderOptions func = do
     headerD = text "fn" <+> renderOptions.renderName func.name
     paramD =
       parensIndent (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderParam func.params))
-    returnTyD =
-      if func.returnTy /= TyUnit then
-        D.space <> text ":" <+> renderValTy func.returnTy
-      else
-        mempty
+    returnTyD = case func.returnTy of
+      TyUnit -> D.space <> text ":" <+> renderTy renderOptions.renderName func.returnTy
+      _ -> mempty
     bodyD = renderExpr renderOptions func.body
   (headerD <+> paramD <> returnTyD <+> text "=") </> indent bodyD
   where
-  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderValTy ty
+  renderParam { name, ty } = renderOptions.renderName name <+> text ":" <+> renderTy renderOptions.renderName ty
 
-renderValTy :: forall a. ValTy -> Doc a
-renderValTy = case _ of
+renderTy :: forall a name. (name -> Doc a) -> Ty name -> Doc a
+renderTy renderName = case _ of
   TyI32 -> text "i32"
   TyF32 -> text "f32"
   TyBool -> text "bool"
   TyUnit -> text "()"
-  TyArray t -> text "[" <> renderValTy t <> text "]"
+  TyArray t -> text "[" <> renderTy renderName t <> text "]"
+  TyCons c -> renderName c
 
-renderFuncTy :: forall a. FuncTy -> Doc a
-renderFuncTy = case _ of
+renderFuncTy :: forall a note name. RenderOptions note name a -> FuncTy name -> Doc a
+renderFuncTy renderOptions = case _ of
   FuncTy arguments result ->
-    parens (D.foldWithSeparator (text "," <> D.space) (map renderValTy arguments)) <+> text "->" <+> renderValTy result
+    parens (D.foldWithSeparator (text "," <> D.space) (map (renderTy renderOptions.renderName) arguments))
+      <+> text "->"
+      <+> renderTy renderOptions.renderName result
 
 renderToplevel :: forall a note name. RenderOptions note name a -> Toplevel note name -> Doc a
 renderToplevel renderOptions = case _ of
   TopFunc func -> renderFunc renderOptions func
   TopLet name init ->
     (text "let" <+> renderOptions.renderName name <+> text "=") </> renderExpr renderOptions init <> text ";"
+  TopStruct name fields -> do
+    let renderField { name: fieldName, ty } = renderOptions.renderName fieldName <+> text ":" <+> renderTy renderOptions.renderName ty
+    (text "struct" <+> renderOptions.renderName name)
+      </> curlies (D.foldWithSeparator (text "," <> D.spaceBreak) (map renderField fields))
   TopImport name ty externalName ->
     text "import"
       <+> renderOptions.renderName name
       <+> text ":"
-      <+> renderFuncTy ty
+      <+> renderFuncTy renderOptions ty
       <+> text "from"
       <+> text externalName
 

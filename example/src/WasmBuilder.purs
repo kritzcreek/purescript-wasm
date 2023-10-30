@@ -10,12 +10,15 @@ module WasmBuilder
   , callImport
   , declareType
   , declareFuncType
+  , declareStructType
   , declareExport
   , declareFunc
   , declareGlobal
   , declareImport
   , declareStart
   , lookupGlobal
+  , lookupStruct
+  , lookupField
   , newLocal
   , lookupLocal
   , liftBuilder
@@ -26,6 +29,7 @@ import Prelude
 import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.FoldableWithIndex (forWithIndex_)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
@@ -42,14 +46,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Partial.Unsafe (unsafeCrashWith)
 import Record as Record
 import Type.Proxy (Proxy(..))
-import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
-
--- - Define functions
--- - Define globals
--- - Declare memories (export/import?)
--- - Declare start symbol?
--- - Declare tables and their elem sections
--- - Declare data sections? (Maybe together with the memory declaration)
+import Wasm.Syntax (CompositeType(..), Export, ExportDesc(..), Expr, FieldIdx, FieldType, Func, FuncIdx, FuncType, Global, GlobalIdx, GlobalType, Import, ImportDesc(..), Instruction(..), LocalIdx, Memory, Module, Name, RecType, TypeIdx, ValType, emptyModule)
 
 type FuncData =
   { index :: FuncIdx
@@ -61,7 +58,6 @@ type FuncData =
 type GlobalData =
   { index :: GlobalIdx
   , type :: GlobalType
-  -- TODO: Do we need to delay initialization of the Expr?
   , init :: Expr
   }
 
@@ -73,6 +69,8 @@ type Env name =
   , globals :: Ref (Map name GlobalData)
   , globalsSupply :: Ref Int
   , types :: Ref (Array RecType)
+  , structs :: Ref (Map name (Tuple TypeIdx (Array name)))
+  , fields :: Ref (Map name (Tuple TypeIdx FieldIdx))
   , memory :: Ref (Maybe Memory)
   , imports :: Ref (Map name ImportData)
   , exports :: Ref (Array Export)
@@ -87,10 +85,12 @@ initialEnv = ado
   globals <- Ref.new Map.empty
   globalsSupply <- Ref.new (-1)
   types <- Ref.new []
+  structs <- Ref.new Map.empty
+  fields <- Ref.new Map.empty
   memory <- Ref.new Nothing
   exports <- Ref.new []
   startFn <- Ref.new Nothing
-  in { funcs, funcsSupply, globals, globalsSupply, types, memory, imports, exports, startFn }
+  in { funcs, funcsSupply, globals, globalsSupply, types, structs, fields, memory, imports, exports, startFn }
 
 newtype Builder name a = Builder (ReaderT (Env name) Effect a)
 
@@ -118,6 +118,28 @@ declareFuncType :: forall name. FuncType -> Builder name TypeIdx
 declareFuncType ty = do
   let funcTy = [ { final: true, supertypes: [], ty: CompFunc ty } ]
   declareType funcTy
+
+-- Error on double declaring struct?
+declareStructType :: forall name. Ord name => name -> Array { name :: name, ty :: FieldType } -> Builder name TypeIdx
+declareStructType name fieldTys = do
+  tyIx <- declareType [ { final: true, supertypes: [], ty: CompStruct (map _.ty fieldTys) } ]
+  mkBuilder \{ structs, fields } -> do
+    Ref.modify_ (Map.insert name (Tuple tyIx (map _.name fieldTys))) structs
+    forWithIndex_ fieldTys \i fTy ->
+      Ref.modify_ (Map.insert fTy.name (Tuple tyIx i)) fields
+  pure tyIx
+
+lookupStruct :: forall name. Show name => Ord name => name -> Builder name (Tuple TypeIdx (Array name))
+lookupStruct name = mkBuilder \{ structs } -> do
+  map (Map.lookup name) (Ref.read structs) >>= case _ of
+    Nothing -> throw ("unknown struct " <> show name)
+    Just idx -> pure idx
+
+lookupField :: forall name. Show name => Ord name => name -> Builder name (Tuple TypeIdx FieldIdx)
+lookupField name = mkBuilder \{ fields } -> do
+  map (Map.lookup name) (Ref.read fields) >>= case _ of
+    Nothing -> throw ("unknown field " <> show name)
+    Just idxs -> pure idxs
 
 nextGlobalIdx :: forall name. Builder name GlobalIdx
 nextGlobalIdx =
