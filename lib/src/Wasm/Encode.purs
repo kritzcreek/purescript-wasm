@@ -410,6 +410,12 @@ write_instr b = case _ of
     write_u32 b 19
     write_u32 b x
     write_u32 b y
+  S.AnyConvertExtern -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 26
+  S.ExternConvertAny -> do
+    DBuffer.addByte b 0xFB
+    write_u32 b 27
   S.Drop ->
     DBuffer.addByte b 0x1A
   S.Select m_tys -> case m_tys of
@@ -745,6 +751,10 @@ write_data_section :: DBuffer -> Array S.Data -> Effect Unit
 write_data_section b datas = write_section b 11 do
   write_vec b (map (write_data b) datas)
 
+write_data_count_section :: DBuffer -> Array S.Data -> Effect Unit
+write_data_count_section b datas = write_section b 12 do
+  write_u32 b (Array.length datas)
+
 write_module :: S.Module -> Effect DBuffer
 write_module module_ = do
   b <- DBuffer.create 8192
@@ -758,6 +768,7 @@ write_module module_ = do
   unless (Array.null module_.exports) (write_export_section b module_.exports)
   for_ module_.start (write_start_section b)
   unless (Array.null module_.elem) (write_elem_section b module_.elem)
+  unless (Array.null module_.data) (write_data_count_section b module_.data)
   unless (Array.null module_.funcs) (write_code_section b module_.funcs)
   unless (Array.null module_.data) (write_data_section b module_.data)
   pure b
