@@ -16,46 +16,110 @@ fn main() = {
 
 function canvasProgram() {
   return localStorage.getItem("canvasProgram") ?? `
-import draw_line : (f32, f32, f32, f32) -> i32 from draw_line
 import clear : () -> i32 from clear_canvas
+import begin_path : (f32) -> f32 from begin_path
+import move_to : (f32, f32) -> f32 from move_to
+import line_to : (f32, f32) -> f32 from line_to
+import close_path : (f32) -> f32 from close_path
+import set_stroke_color : (f32, f32, f32) -> f32 from set_stroke_color
+import stroke : (f32) -> f32 from stroke
 
-let xs = [0.0, 100.0, 200.0, 300.0, 400.0];
-let ys = @array_new(0.0, 5);
-let vxs = [9.0, 10.0, 11.0, 12.0, 13.0];
-let vys = [9.0, 10.0, 11.0, 12.0, 13.0];
-
-fn draw_cube(x : f32, y : f32, size: f32) : i32 = {
-  draw_line(x, y, x + size, y);
-  draw_line(x, y, x, y + size);
-  draw_line(x + size, y + size, x, y + size);
-  draw_line(x + size, y + size, x + size, y)
+struct Color {
+  r : f32,
+  g : f32,
+  b : f32
 }
+
+struct Cube {
+  x : f32,
+  y : f32,
+  vx : f32,
+  vy : f32,
+  size : f32,
+  color : Color
+}
+
+let red = Color { r = 180.0, g = 0.0, b = 0.0 };
+let blue = Color { r = 0.0, g = 180.0, b = 0.0 };
+let green = Color { r = 0.0, g = 0.0, b = 180.0 };
+
+let cubes = [
+  Cube { x =   0.0, y = 0.0, vx =  9.0, vy =  9.0, size = 10.0, color = red },
+  Cube { x = 100.0, y = 0.0, vx = 10.0, vy = 10.0, size = 15.0, color = blue },
+  Cube { x = 200.0, y = 0.0, vx = 11.0, vy = 11.0, size = 20.0, color = green },
+  Cube { x = 300.0, y = 0.0, vx = 12.0, vy = 12.0, size = 25.0, color = red },
+  Cube { x = 400.0, y = 0.0, vx = 13.0, vy = 13.0, size = 30.0, color = blue }
+];
 
 fn clamp(min : f32, val : f32, max : f32) : f32 = {
   f32_min(500.0, f32_max(0.0, val))
+}
+
+fn draw_cube(cube : Cube) : f32 = {
+  let x = cube.x;
+  let y = cube.y;
+  let size = cube.size;
+  begin_path(0.0);
+  move_to(x, y);
+  line_to(x , y + cube.size);
+  line_to(x + cube.size, y + cube.size);
+  line_to(x + cube.size, y);
+  set_stroke_color(cube.color.r, cube.color.g, cube.color.b);
+  close_path(0.0);
+  stroke(0.0)
+}
+
+fn do_cubes_collide(c1 : Cube, c2 : Cube) : bool = {
+  let overlap_x = c1.x < c2.x + c2.size && c1.x + c1.size > c2.x;
+  let overlap_y = c1.y < c2.y + c2.size && c1.y + c1.size > c2.y;
+  overlap_y && overlap_x
+}
+
+fn tick_cube(cube : Cube, elapsed_time_ms : f32) = {
+  let elapsed_factor = elapsed_time_ms / 32.0;
+
+  set cube.x = cube.x + cube.vx * elapsed_factor;
+  set cube.y = cube.y + cube.vy * elapsed_factor;
+
+  if cube.x < 0.0 || cube.x > 500.0 {
+    set cube.x = clamp(0.0, cube.x, 500.0);
+    set cube.vx = f32_neg(cube.vx)
+  } else {};
+
+  if cube.y < 0.0 || cube.y > 500.0 {
+    set cube.y = clamp(0.0, cube.y, 500.0);
+    set cube.vy = f32_neg(cube.vy)
+  } else {}
+}
+
+fn collide_cube(cube : Cube) = {
+  let idx = 0;
+  while idx < @array_len(cubes) {
+    if cubes[idx].x == cube.x && cubes[idx].y == cube.y {
+    } else {
+      if do_cubes_collide(cube, cubes[idx]) {
+        let x_dist = f32_abs(cube.x - cubes[idx].x);
+        let y_dist = f32_abs(cube.y - cubes[idx].y);
+        if x_dist > y_dist {
+          set cube.vx = f32_neg(cube.vx)
+        } else {
+          set cube.vy = f32_neg(cube.vy)
+        }
+      } else {}
+    };
+
+    set idx = idx + 1
+  }
 }
 
 fn tick(elapsed_time_ms : f32) = {
   clear();
 
   let idx = 0;
-  while idx < @array_len(xs) {
-    let elapsed_factor = elapsed_time_ms / 32.0;
-
-    set xs[idx] = xs[idx] + vxs[idx] * elapsed_factor;
-    set ys[idx] = ys[idx] + vys[idx] * elapsed_factor;
-
-    if xs[idx] < 0.0 || xs[idx] > 500.0 {
-      set xs[idx] = clamp(0.0, xs[idx], 500.0);
-      set vxs[idx] = 0.0 - vxs[idx]
-    } else {};
-
-    if ys[idx] < 0.0 || ys[idx] > 500.0 {
-      set ys[idx] = clamp(0.0, ys[idx], 500.0);
-      set vys[idx] = 0.0 - vys[idx]
-    } else {};
-
-    draw_cube(xs[idx], ys[idx], 20.0);
+  while idx < @array_len(cubes) {
+    collide_cube(cubes[idx]);
+    tick_cube(cubes[idx], elapsed_time_ms);
+    draw_cube(cubes[idx]);
 
     set idx = idx + 1
   }
@@ -68,17 +132,34 @@ const canvas = document.getElementById("canvas");
  * @type CanvasRenderingContext2D
  */
 const ctx = canvas.getContext("2d");
+ctx.lineWidth = 3.0
 
-function clearCanvas() {
+function clear_canvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 }
 
-function draw_line(startx, starty, endx, endy) {
+function begin_path(_x) {
   ctx.beginPath()
-  ctx.moveTo(startx, starty)
-  ctx.lineTo(endx, endy)
+}
+
+function move_to(x, y) {
+  ctx.moveTo(x, y)
+}
+
+function line_to(x, y) {
+  ctx.lineTo(x, y)
+}
+
+function close_path(_x) {
   ctx.closePath()
+}
+
+function stroke(_x) {
   ctx.stroke()
+}
+
+function set_stroke_color(r, g, b) {
+  ctx.strokeStyle = (`rgb(${r}, ${g}, ${b})`)
 }
 
 let tick = () => {}
@@ -148,7 +229,7 @@ document.getElementById("toggleCanvas").onclick = function(e) {
     setEditorContent(canvasProgram())
     document.getElementById("toggleCanvas").innerText = "Use canvas: On"
   } else {
-    clearCanvas()
+    clear_canvas()
     stopRender()
     setEditorContent(mainProgram())
     document.getElementById("toggleCanvas").innerText = "Use canvas: Off"
@@ -200,12 +281,17 @@ function restartRender() {
   if (compiled) {
     const imports = {
       env: {
-        draw_line: draw_line,
-        clear_canvas: clearCanvas
+        clear_canvas,
+        begin_path,
+        move_to,
+        line_to,
+        close_path,
+        set_stroke_color,
+        stroke
       }
     }
     instantiateWasm(compiled, imports).then(inst => {
-      clearCanvas()
+      clear_canvas()
       tick = (elapsed) => inst.exports.tick(elapsed)
     }).then(() => {
       requestAnimationFrame(render)
