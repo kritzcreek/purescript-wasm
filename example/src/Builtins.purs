@@ -79,7 +79,7 @@ f32_sqrt :: Fn
 f32_sqrt = f32_func_unary "f32_sqrt" S.F32Sqrt
 
 f32_copysign :: Fn
-f32_copysign = f32_func_unary "f32_copysign" S.F32Copysign
+f32_copysign = f32_func_binary "f32_copysign" S.F32Copysign
 
 f32_convert_i32_s :: Fn
 f32_convert_i32_s =

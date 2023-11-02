@@ -20,6 +20,7 @@ import clear : () -> i32 from clear_canvas
 import begin_path : (f32) -> f32 from begin_path
 import move_to : (f32, f32) -> f32 from move_to
 import line_to : (f32, f32) -> f32 from line_to
+import arc : (f32, f32, f32, f32, f32) -> f32 from arc
 import close_path : (f32) -> f32 from close_path
 import set_stroke_color : (f32, f32, f32) -> f32 from set_stroke_color
 import stroke : (f32) -> f32 from stroke
@@ -39,17 +40,46 @@ struct Cube {
   color : Color
 }
 
+struct Particle {
+  x : f32,
+  y : f32,
+  color : Color,
+  time : f32
+}
+
+struct RingBuffer {
+  buffer : [Particle],
+  watermark : i32
+}
+
+let pi = 3.14159265359;
+let particle_timer = 200.0;
+
 let red = Color { r = 180.0, g = 0.0, b = 0.0 };
-let blue = Color { r = 0.0, g = 180.0, b = 0.0 };
-let green = Color { r = 0.0, g = 0.0, b = 180.0 };
+let green = Color { r = 0.0, g = 180.0, b = 0.0 };
+let blue = Color { r = 0.0, g = 0.0, b = 180.0 };
 
 let cubes = [
-  Cube { x =   0.0, y = 0.0, vx =  9.0, vy =  9.0, size = 10.0, color = red },
-  Cube { x = 100.0, y = 0.0, vx = 10.0, vy = 10.0, size = 15.0, color = blue },
-  Cube { x = 200.0, y = 0.0, vx = 11.0, vy = 11.0, size = 20.0, color = green },
-  Cube { x = 300.0, y = 0.0, vx = 12.0, vy = 12.0, size = 25.0, color = red },
-  Cube { x = 400.0, y = 0.0, vx = 13.0, vy = 13.0, size = 30.0, color = blue }
+  Cube { x =   0.0, y = 0.0, vx =  9.0, vy = 14.0, size = 10.0, color =   red },
+  Cube { x = 100.0, y = 0.0, vx = 10.0, vy = 13.0, size = 15.0, color = green },
+  Cube { x = 200.0, y = 0.0, vx = 11.0, vy = 12.0, size = 20.0, color =  blue },
+  Cube { x = 300.0, y = 0.0, vx = 12.0, vy = 11.0, size = 25.0, color =  blue },
+  Cube { x = 400.0, y = 0.0, vx = 13.0, vy = 10.0, size = 30.0, color = green },
+  Cube { x = 500.0, y = 0.0, vx = 14.0, vy =  9.0, size = 35.0, color =   red },
+  Cube { x = 500.0, y = 0.0, vx = 19.0, vy =  17.0, size = 35.0, color =   blue }
 ];
+
+let particles = RingBuffer {
+  buffer = @array_new(Particle { x = 0.0, y = 0.0, color = red, time = 0.0 }, 25),
+  watermark = 0
+};
+
+fn add_particle(p : Particle) = {
+  let buffer = particles.buffer;
+  set buffer[particles.watermark] = p;
+  set particles.watermark =
+    i32_rem_s(particles.watermark + 1, @array_len(particles.buffer))
+}
 
 fn clamp(min : f32, val : f32, max : f32) : f32 = {
   f32_min(500.0, f32_max(0.0, val))
@@ -69,14 +99,35 @@ fn draw_cube(cube : Cube) : f32 = {
   stroke(0.0)
 }
 
-fn do_cubes_collide(c1 : Cube, c2 : Cube) : bool = {
+fn draw_particle(particle : Particle) : f32 = {
+
+  if particle.time > 0.0 {
+    begin_path(0.0);
+    arc(particle.x, particle.y, (particle_timer - particle.time) / 2.0, 0.0, pi * 2.0);
+    set_stroke_color(particle.color.r, particle.color.g, particle.color.b);
+    stroke(0.0)
+  } else { 0.0 }
+}
+
+fn collide_cubes(c1 : Cube, c2 : Cube) = {
   let overlap_x = c1.x < c2.x + c2.size && c1.x + c1.size > c2.x;
   let overlap_y = c1.y < c2.y + c2.size && c1.y + c1.size > c2.y;
-  overlap_y && overlap_x
+
+  if overlap_y && overlap_x {
+    add_particle(Particle { x = c1.x, y = c1.y, color = c1.color, time = particle_timer });
+
+    let delta_x = c1.x - c2.x;
+    let delta_y = c1.y - c2.y;
+    if f32_abs(delta_x) > f32_abs(delta_y) {
+      set c1.vx = f32_copysign(c1.vx, delta_x)
+    } else {
+      set c1.vy = f32_copysign(c1.vy, delta_y)
+    }
+  } else {}
 }
 
 fn tick_cube(cube : Cube, elapsed_time_ms : f32) = {
-  let elapsed_factor = elapsed_time_ms / 32.0;
+  let elapsed_factor = elapsed_time_ms / 48.0;
 
   set cube.x = cube.x + cube.vx * elapsed_factor;
   set cube.y = cube.y + cube.vy * elapsed_factor;
@@ -97,19 +148,12 @@ fn collide_cube(cube : Cube) = {
   while idx < @array_len(cubes) {
     if cubes[idx].x == cube.x && cubes[idx].y == cube.y {
     } else {
-      if do_cubes_collide(cube, cubes[idx]) {
-        let x_dist = f32_abs(cube.x - cubes[idx].x);
-        let y_dist = f32_abs(cube.y - cubes[idx].y);
-        if x_dist > y_dist {
-          set cube.vx = f32_neg(cube.vx)
-        } else {
-          set cube.vy = f32_neg(cube.vy)
-        }
-      } else {}
+      collide_cubes(cube, cubes[idx])
     };
 
     set idx = idx + 1
   }
+
 }
 
 fn tick(elapsed_time_ms : f32) = {
@@ -120,6 +164,16 @@ fn tick(elapsed_time_ms : f32) = {
     collide_cube(cubes[idx]);
     tick_cube(cubes[idx], elapsed_time_ms);
     draw_cube(cubes[idx]);
+
+    set idx = idx + 1
+  };
+
+
+  set idx = 0;
+  while idx < @array_len(particles.buffer) {
+    draw_particle(particles.buffer[idx]);
+    let particle = particles.buffer[idx];
+    set particle.time = f32_max(0.0, particle.time - elapsed_time_ms);
 
     set idx = idx + 1
   }
@@ -285,6 +339,7 @@ function restartRender() {
         begin_path,
         move_to,
         line_to,
+        arc: (x, y, a, b, c) => ctx.arc(x, y, a, b, c),
         close_path,
         set_stroke_color,
         stroke
