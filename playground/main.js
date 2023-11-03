@@ -52,7 +52,7 @@ struct RingBuffer {
   watermark : i32
 }
 
-let pi = 3.14159265359;
+let two_pi = 3.14159265359 * 2.0;
 let particle_timer = 200.0;
 
 let red = Color { r = 180.0, g = 0.0, b = 0.0 };
@@ -103,7 +103,7 @@ fn draw_particle(particle : Particle) : f32 = {
 
   if particle.time > 0.0 {
     begin_path(0.0);
-    arc(particle.x, particle.y, (particle_timer - particle.time) / 2.0, 0.0, pi * 2.0);
+    arc(particle.x, particle.y, (particle_timer - particle.time) / 2.0, 0.0, two_pi);
     set_stroke_color(particle.color.r, particle.color.g, particle.color.b);
     stroke(0.0)
   } else { 0.0 }
