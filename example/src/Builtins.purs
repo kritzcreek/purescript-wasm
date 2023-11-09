@@ -78,9 +78,6 @@ f32_nearest = f32_func_unary "f32_nearest" S.F32Nearest
 f32_sqrt :: Fn
 f32_sqrt = f32_func_unary "f32_sqrt" S.F32Sqrt
 
-f32_copysign :: Fn
-f32_copysign = f32_func_binary "f32_copysign" S.F32Copysign
-
 f32_convert_i32_s :: Fn
 f32_convert_i32_s =
   { name: "f32_convert_i32_s"
@@ -94,6 +91,9 @@ f32_convert_i32_u =
   , ty: FuncTy [ TyI32 ] TyF32
   , instr: S.F32ConvertI32_u
   }
+
+f32_copysign :: Fn
+f32_copysign = f32_func_binary "f32_copysign" S.F32Copysign
 
 f32_min :: Fn
 f32_min = f32_func_binary "f32_min" S.F32Min
@@ -124,6 +124,12 @@ i32_ctz = i32_func_unary "i32_ctz" S.I32Ctz
 i32_popcnt :: Fn
 i32_popcnt = i32_func_unary "i32_popcnt" S.I32Popcnt
 
+i32_rotl :: Fn
+i32_rotl = i32_func_unary "i32_rotl" S.I32Rotl
+
+i32_rotr :: Fn
+i32_rotr = i32_func_unary "i32_rotr" S.I32Rotr
+
 i32_rem_s :: Fn
 i32_rem_s = i32_func_binary "i32_rem_s" S.I32Rem_s
 
@@ -132,12 +138,6 @@ i32_shl = i32_func_binary "i32_shl" S.I32Shl
 
 i32_shr_s :: Fn
 i32_shr_s = i32_func_binary "i32_shr_s" S.I32Shr_s
-
-i32_rotl :: Fn
-i32_rotl = i32_func_unary "i32_rotl" S.I32Rotl
-
-i32_rotr :: Fn
-i32_rotr = i32_func_unary "i32_rotr" S.I32Rotr
 
 i32_trunc_f32_s :: Fn
 i32_trunc_f32_s =

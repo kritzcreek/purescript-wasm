@@ -17,11 +17,12 @@ import WasmBuilder as Builder
 type Builder = Builder.Builder Var
 type BodyBuilder = Builder.BodyBuilder Var
 
-type CFunc = Ast.Func (Ast.Ty Var) Var
-type CExpr = Ast.Expr (Ast.Ty Var) Var
-type CDecl = Ast.Decl (Ast.Ty Var) Var
-type CToplevel = Ast.Toplevel (Ast.Ty Var) Var
-type CProgram = Ast.Program (Ast.Ty Var) Var
+type CTy = Ast.Ty Var
+type CFunc = Ast.Func CTy Var
+type CExpr = Ast.Expr CTy Var
+type CDecl = Ast.Decl CTy Var
+type CToplevel = Ast.Toplevel CTy Var
+type CProgram = Ast.Program CTy Var
 
 i32 :: S.ValType
 i32 = S.NumType S.I32
@@ -32,7 +33,7 @@ f32 = S.NumType S.F32
 typeOf :: CExpr -> Builder S.ValType
 typeOf e = valTy (Types.typeOf e)
 
-valTy :: Ast.Ty Var -> Builder S.ValType
+valTy :: CTy -> Builder S.ValType
 valTy = case _ of
   Ast.TyI32 -> pure i32
   Ast.TyF32 -> pure f32
@@ -45,7 +46,7 @@ valTy = case _ of
     Tuple ix _ <- Builder.lookupStruct v
     pure (S.RefType (S.HeapTypeRef true (S.IndexHt ix)))
 
-declareArrayType :: Ast.Ty Var -> Builder S.TypeIdx
+declareArrayType :: CTy -> Builder S.TypeIdx
 declareArrayType = case _ of
   Ast.TyArray t -> do
     elTy <- valTy t
@@ -158,7 +159,7 @@ compileConst e = case e.expr of
   Ast.LitE (Ast.FloatLit x) -> Just [ S.F32Const x ]
   _ -> Nothing
 
-compileOp :: Ast.Ty Var -> Ast.Op -> S.Instruction
+compileOp :: CTy -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
   -- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
   Ast.TyBool, Ast.Eq -> S.I32Eq
