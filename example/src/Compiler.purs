@@ -159,14 +159,13 @@ compileConst e = case e.expr of
   Ast.LitE (Ast.FloatLit x) -> Just [ S.F32Const x ]
   _ -> Nothing
 
+-- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
 compileOp :: CTy -> Ast.Op -> S.Instruction
 compileOp = case _, _ of
-  -- TODO: Potential optimization detect `== 0` and use `S.I32Eqz`
-  Ast.TyBool, Ast.Eq -> S.I32Eq
-  Ast.TyBool, Ast.Neq -> S.I32Ne
-
   Ast.TyBool, Ast.And -> S.I32And
   Ast.TyBool, Ast.Or -> S.I32Or
+  Ast.TyBool, Ast.Eq -> S.I32Eq
+  Ast.TyBool, Ast.Neq -> S.I32Ne
 
   Ast.TyI32, Ast.Add -> S.I32Add
   Ast.TyI32, Ast.Sub -> S.I32Sub
