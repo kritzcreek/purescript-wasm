@@ -1,8 +1,6 @@
 {
   "name": "purescript-wasm",
   "type": "module",
-  "version": "1.0.0",
-  "description": "",
   "scripts": {
     "build": "spago build -p example",
     "start": "spago run -p example",
@@ -11,8 +9,6 @@
     "pscid": "pscid -I \"lib;example\" --test",
     "pscid:test": "npm start; exit 1"
   },
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "live-server": "^1.2.2",
     "pscid": "^2.11.0",
